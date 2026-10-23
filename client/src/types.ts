@@ -18,6 +18,7 @@ export interface User {
   theme?: ThemeKind | null;
   themeColors?: { light: ThemeColors; dark: ThemeColors } | null;
   feedToken?: string | null;
+  country?: string | null;
   lastLoginAt?: string | null;
   createdAt?: string;
 }
@@ -71,7 +72,24 @@ export interface PublicSettings {
   setupCompleted: boolean;
 }
 
+export interface HolidaySource {
+  id: string;
+  country: string;
+  url: string;
+  name: string;
+}
+
+export interface HolidaySyncResult {
+  sources: number;
+  users: number;
+  created: number;
+  updated: number;
+  deleted: number;
+  errors: string[];
+}
+
 export interface AdminSettings extends PublicSettings {
+  holidaySources: HolidaySource[];
   smtp: {
     host: string;
     port: number;

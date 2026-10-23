@@ -17,6 +17,8 @@ import { audit } from '../lib/audit';
 import { asyncHandler, HttpError, nowIso, randomToken } from '../lib/util';
 import { SettingsStore } from '../settings';
 import { isValidTimeZone } from '../lib/time';
+import { isCountryCode } from '../lib/countries';
+import { syncHolidays } from '../lib/holidays';
 
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(100),
@@ -59,6 +61,7 @@ const preferencesSchema = z.object({
   email: z.string().trim().email().max(200).optional(),
   language: z.enum(['fr', 'en', 'de']).optional(),
   timezone: z.string().max(80).nullable().optional(),
+  country: z.string().trim().length(2).nullable().optional(),
   dateFormat: z.string().max(30).nullable().optional(),
   timeFormat: z.enum(['12', '24']).nullable().optional(),
   defaultView: z
@@ -156,6 +159,7 @@ export function authRoutes(): Router {
     asyncHandler(async (req, res) => {
       const body = preferencesSchema.parse(req.body);
       if (body.timezone && !isValidTimeZone(body.timezone)) throw new HttpError(400, 'invalid_timezone');
+      if (body.country && !isCountryCode(body.country)) throw new HttpError(400, 'invalid_country');
       if (body.themeColors && !new SettingsStore(req.db).get().allowUserColors) {
         throw new HttpError(403, 'user_colors_disabled');
       }
@@ -176,8 +180,8 @@ export function authRoutes(): Router {
       req.db
         .prepare(
           `UPDATE users SET first_name = ?, last_name = ?, email = ?, language = ?, timezone = ?,
-             date_format = ?, time_format = ?, default_view = ?, theme = ?, theme_colors = ?, updated_at = ?
-           WHERE id = ?`
+             country = ?, date_format = ?, time_format = ?, default_view = ?, theme = ?, theme_colors = ?,
+             updated_at = ? WHERE id = ?`
         )
         .run(
           body.firstName ?? current.first_name,
@@ -185,6 +189,7 @@ export function authRoutes(): Router {
           body.email ?? current.email,
           body.language ?? current.language,
           body.timezone !== undefined ? body.timezone : current.timezone,
+          body.country !== undefined ? body.country : current.country,
           body.dateFormat !== undefined ? body.dateFormat : current.date_format,
           body.timeFormat !== undefined ? body.timeFormat : current.time_format,
           body.defaultView ?? current.default_view,
@@ -194,6 +199,9 @@ export function authRoutes(): Router {
           current.id
         );
       const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(current.id) as UserRow;
+      if (body.country !== undefined && body.country !== current.country) {
+        void syncHolidays(req.db, new SettingsStore(req.db).get(), current.id).catch(() => undefined);
+      }
       res.json({ user: publicUser(user) });
     })
   );

@@ -5,6 +5,9 @@ import { hashPassword, passwordIssues } from '../lib/password';
 import { audit } from '../lib/audit';
 import { asyncHandler, HttpError, newId, nowIso, randomToken } from '../lib/util';
 import { isValidTimeZone } from '../lib/time';
+import { isCountryCode } from '../lib/countries';
+import { SettingsStore } from '../settings';
+import { syncHolidays } from '../lib/holidays';
 
 const createSchema = z.object({
   username: z.string().trim().min(3).max(50),
@@ -14,7 +17,8 @@ const createSchema = z.object({
   password: z.string().min(8).max(200),
   isAdmin: z.boolean().optional().default(false),
   language: z.enum(['fr', 'en', 'de']).optional().default('fr'),
-  timezone: z.string().max(80).optional()
+  timezone: z.string().max(80).optional(),
+  country: z.string().trim().length(2).optional()
 });
 
 const updateSchema = z.object({
@@ -25,6 +29,7 @@ const updateSchema = z.object({
   isActive: z.boolean().optional(),
   language: z.enum(['fr', 'en', 'de']).optional(),
   timezone: z.string().max(80).nullable().optional(),
+  country: z.string().trim().length(2).nullable().optional(),
   defaultView: z.enum(['day', 'week', 'month']).optional()
 });
 
@@ -39,7 +44,7 @@ export function userRoutes(): Router {
     asyncHandler(async (req, res) => {
       const rows = req.db
         .prepare(
-          `SELECT id, username, email, first_name, last_name, is_admin, is_active, language, timezone, default_view, created_at
+          `SELECT id, username, email, first_name, last_name, is_admin, is_active, language, timezone, country, default_view, created_at
            FROM users ORDER BY first_name, last_name, username`
         )
         .all() as UserRow[];
@@ -54,6 +59,7 @@ export function userRoutes(): Router {
           isActive: Boolean(u.is_active),
           language: u.language,
           timezone: u.timezone,
+          country: u.country,
           defaultView: u.default_view,
           ...(isAdmin ? { email: u.email, createdAt: u.created_at } : {})
         }))
@@ -69,6 +75,7 @@ export function userRoutes(): Router {
       const issue = passwordIssues(body.password);
       if (issue) throw new HttpError(400, issue);
       if (body.timezone && !isValidTimeZone(body.timezone)) throw new HttpError(400, 'invalid_timezone');
+      if (body.country && !isCountryCode(body.country)) throw new HttpError(400, 'invalid_country');
       const exists = req.db
         .prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE')
         .get(body.username);
@@ -82,8 +89,8 @@ export function userRoutes(): Router {
       req.db.transaction(() => {
         req.db
           .prepare(
-            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, default_view, feed_token, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'week', ?, ?, ?)`
+            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, country, default_view, feed_token, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'week', ?, ?, ?)`
           )
           .run(
             id,
@@ -95,6 +102,7 @@ export function userRoutes(): Router {
             body.isAdmin ? 1 : 0,
             body.language,
             body.timezone ?? null,
+            body.country ?? null,
             randomToken(24),
             now,
             now
@@ -104,6 +112,9 @@ export function userRoutes(): Router {
           .run(newId(), id, body.username, color, now);
       })();
       const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
+      if (body.country) {
+        void syncHolidays(req.db, new SettingsStore(req.db).get(), id).catch(() => undefined);
+      }
       audit(req.db, {
         userId: req.user!.id,
         action: 'user.created',
@@ -122,6 +133,7 @@ export function userRoutes(): Router {
     asyncHandler(async (req, res) => {
       const body = updateSchema.parse(req.body);
       if (body.timezone && !isValidTimeZone(body.timezone)) throw new HttpError(400, 'invalid_timezone');
+      if (body.country && !isCountryCode(body.country)) throw new HttpError(400, 'invalid_country');
       const target = req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id) as
         | UserRow
         | undefined;
@@ -138,7 +150,7 @@ export function userRoutes(): Router {
       req.db
         .prepare(
           `UPDATE users SET email = ?, first_name = ?, last_name = ?, is_admin = ?, is_active = ?,
-             language = ?, timezone = ?, default_view = ?, updated_at = ? WHERE id = ?`
+             language = ?, timezone = ?, country = ?, default_view = ?, updated_at = ? WHERE id = ?`
         )
         .run(
           body.email ?? target.email,
@@ -148,12 +160,16 @@ export function userRoutes(): Router {
           body.isActive === undefined ? target.is_active : body.isActive ? 1 : 0,
           body.language ?? target.language,
           body.timezone !== undefined ? body.timezone : target.timezone,
+          body.country !== undefined ? body.country : target.country,
           body.defaultView ?? target.default_view,
           nowIso(),
           target.id
         );
       if (body.isActive === false) {
         req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(target.id);
+      }
+      if (body.country !== undefined && body.country !== target.country) {
+        void syncHolidays(req.db, new SettingsStore(req.db).get(), target.id).catch(() => undefined);
       }
       audit(req.db, {
         userId: req.user!.id,

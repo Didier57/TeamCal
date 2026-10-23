@@ -5,6 +5,8 @@ import { asyncHandler, HttpError } from '../lib/util';
 import { SettingsStore } from '../settings';
 import { sendTestEmail } from '../lib/mailer';
 import { isValidTimeZone } from '../lib/time';
+import { isCountryCode } from '../lib/countries';
+import { syncHolidays } from '../lib/holidays';
 
 const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 
@@ -58,6 +60,22 @@ const settingsSchema = z.object({
   allowUserColors: z.boolean().optional(),
   priorities: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
   visibilityOptions: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
+  holidaySources: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1).max(80),
+        country: z.string().trim().min(2).max(2),
+        url: z
+          .string()
+          .trim()
+          .url()
+          .max(1000)
+          .refine((value) => /^https?:\/\//i.test(value), 'invalid_url'),
+        name: z.string().trim().max(120).optional().default('')
+      })
+    )
+    .max(100)
+    .optional(),
   theme: z.object({ light: themeColors, dark: themeColors }).partial().optional(),
   smtp: z
     .object({
@@ -106,6 +124,14 @@ export function settingsRoutes(): Router {
       if (body.defaultTimezone && !isValidTimeZone(body.defaultTimezone)) {
         throw new HttpError(400, 'invalid_timezone');
       }
+      if (body.holidaySources) {
+        for (const source of body.holidaySources) {
+          if (!isCountryCode(source.country)) throw new HttpError(400, 'invalid_country');
+        }
+        if (new Set(body.holidaySources.map((source) => source.id)).size !== body.holidaySources.length) {
+          throw new HttpError(400, 'duplicate_holiday_source');
+        }
+      }
       const store = new SettingsStore(req.db);
       const current = store.get();
       if (body.smtp) {
@@ -118,6 +144,7 @@ export function settingsRoutes(): Router {
       }
       store.set(body as Record<string, unknown>);
       const settings = store.get();
+      void syncHolidays(req.db, settings).catch(() => undefined);
       res.json({
         ...settings,
         smtp: { ...settings.smtp, password: '', hasPassword: Boolean(settings.smtp.password) }

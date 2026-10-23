@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiGet, apiPatch, apiPost, ApiError } from '../../api';
 import { useAuth } from '../../app-context';
 import { languageLabel, useI18n } from '../../i18n';
+import { countryLabel, EUROPEAN_COUNTRY_CODES } from '../../countries';
 import type { Language, User } from '../../types';
 
 interface FormState {
@@ -13,6 +14,7 @@ interface FormState {
   password: string;
   language: Language;
   timezone: string;
+  country: string;
   isAdmin: boolean;
   isActive: boolean;
 }
@@ -26,6 +28,7 @@ const empty: FormState = {
   password: '',
   language: 'fr',
   timezone: '',
+  country: '',
   isAdmin: false,
   isActive: true
 };
@@ -45,7 +48,7 @@ const timezones = [
 ];
 
 export function UsersAdmin() {
-  const { t, errorMessage } = useI18n();
+  const { t, errorMessage, locale } = useI18n();
   const { refresh } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [form, setForm] = useState<FormState | null>(null);
@@ -79,6 +82,7 @@ export function UsersAdmin() {
       password: '',
       language: user.language,
       timezone: user.timezone ?? '',
+      country: user.country ?? '',
       isAdmin: user.isAdmin,
       isActive: user.isActive
     });
@@ -97,6 +101,7 @@ export function UsersAdmin() {
           email: form.email,
           language: form.language,
           timezone: form.timezone || null,
+          country: form.country || null,
           isAdmin: form.isAdmin,
           isActive: form.isActive
         });
@@ -110,6 +115,7 @@ export function UsersAdmin() {
           password: form.password,
           language: form.language,
           timezone: form.timezone || undefined,
+          country: form.country || undefined,
           isAdmin: form.isAdmin
         });
         setFlash(t('admin.userCreated'));
@@ -170,6 +176,7 @@ export function UsersAdmin() {
               <th>{t('common.username')}</th>
               <th>{t('common.email')}</th>
               <th>{t('common.language')}</th>
+              <th>{t('common.country')}</th>
               <th>{t('common.admin')}</th>
               <th>{t('common.active')}</th>
               <th>{t('admin.lastLogin')}</th>
@@ -185,6 +192,7 @@ export function UsersAdmin() {
                 <td>{user.username}</td>
                 <td>{user.email ?? '—'}</td>
                 <td>{languageLabel(user.language)}</td>
+                <td>{user.country ? countryLabel(user.country, locale) : '-'}</td>
                 <td>{user.isAdmin ? t('common.yes') : t('common.no')}</td>
                 <td>
                   <span className={`pill ${user.isActive ? 'success' : 'muted'}`}>
@@ -284,6 +292,17 @@ export function UsersAdmin() {
                 {timezones.map((tz) => (
                   <option key={tz || 'default'} value={tz}>
                     {tz || t('admin.defaultTimezone')}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{t('common.country')}</span>
+              <select value={form.country} onChange={(event) => setForm({ ...form, country: event.target.value })}>
+                <option value="">{t('common.none')}</option>
+                {EUROPEAN_COUNTRY_CODES.map((code) => (
+                  <option key={code} value={code}>
+                    {countryLabel(code, locale)}
                   </option>
                 ))}
               </select>

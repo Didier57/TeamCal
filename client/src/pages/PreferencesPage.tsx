@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { apiGet, apiPost, apiPut, ApiError } from '../api';
 import { defaultThemeColors, useAuth } from '../app-context';
 import { languageLabel, useI18n } from '../i18n';
+import { countryLabel, EUROPEAN_COUNTRY_CODES } from '../countries';
 import type { CustomView, Language, ThemeColors, ThemeKind, User } from '../types';
 import { ThemeColorEditor } from '../components/ThemeColorEditor';
 
@@ -25,12 +26,13 @@ const timezoneChoices = timezones.includes(browserTimeZone)
 
 export function PreferencesPage() {
   const { user, settings, setUser, setTheme } = useAuth();
-  const { t, errorMessage, setLanguage } = useI18n();
+  const { t, errorMessage, setLanguage, locale } = useI18n();
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
   const [lastName, setLastName] = useState(user?.lastName ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [language, setLanguageValue] = useState<Language>(user?.language ?? 'fr');
   const [timezone, setTimezone] = useState(user?.timezone ?? '');
+  const [country, setCountry] = useState(user?.country ?? '');
   const [dateFormat, setDateFormat] = useState(user?.dateFormat ?? '');
   const [timeFormat, setTimeFormat] = useState(user?.timeFormat ?? '');
   const [defaultView, setDefaultView] = useState<string>(user?.defaultView ?? 'week');
@@ -126,6 +128,7 @@ export function PreferencesPage() {
         email,
         language,
         timezone: timezone || null,
+        country: country || null,
         dateFormat: dateFormat || null,
         timeFormat: timeFormat || null,
         defaultView,
@@ -212,6 +215,18 @@ export function PreferencesPage() {
             <button type="button" className="link" onClick={() => setTimezone(browserTimeZone)}>
               {t('prefs.useBrowserTimeZone')} ({browserTimeZone})
             </button>
+          </label>
+          <label>
+            <span>{t('prefs.country')}</span>
+            <select value={country} onChange={(event) => setCountry(event.target.value)}>
+              <option value="">{t('common.none')}</option>
+              {EUROPEAN_COUNTRY_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {countryLabel(code, locale)}
+                </option>
+              ))}
+            </select>
+            <span className="hint">{t('prefs.countryHint')}</span>
           </label>
           <label>
             <span>{t('prefs.dateFormat')}</span>

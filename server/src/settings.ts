@@ -24,6 +24,13 @@ export interface ThemeColors {
   eventDetailsText: string;
 }
 
+export interface HolidaySource {
+  id: string;
+  country: string;
+  url: string;
+  name: string;
+}
+
 export interface SmtpSettings {
   host: string;
   port: number;
@@ -57,6 +64,7 @@ export interface AppSettings {
   allowUserColors: boolean;
   priorities: string[];
   visibilityOptions: string[];
+  holidaySources: HolidaySource[];
   theme: { light: ThemeColors; dark: ThemeColors };
   smtp: SmtpSettings;
   sessionDurationDays: number;
@@ -86,6 +94,7 @@ export const defaultSettings: AppSettings = {
   allowUserColors: false,
   priorities: ['low', 'normal', 'high'],
   visibilityOptions: ['default', 'private', 'public'],
+  holidaySources: [],
   theme: {
     light: {
       primary: '#2f6feb',

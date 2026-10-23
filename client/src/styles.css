@@ -1059,6 +1059,31 @@ label small,
   font-size: 12px;
 }
 
+.holiday-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.holiday-source-row {
+  display: grid;
+  grid-template-columns: 180px minmax(220px, 1fr) minmax(140px, 0.6fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.holiday-source-row input,
+.holiday-source-row select {
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .holiday-source-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 .table-wrap {
   overflow-x: auto;
 }

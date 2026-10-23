@@ -15,6 +15,7 @@ import { calendarRoutes } from './modules/calendars';
 import { eventRoutes } from './modules/events';
 import { viewRoutes } from './modules/views';
 import { feedRoutes } from './modules/feed';
+import { holidayRoutes } from './modules/holidays';
 
 export interface AppOptions {
   clientDist?: string;
@@ -62,6 +63,7 @@ export function createApp(db: DB, options: AppOptions = {}) {
   app.use('/api/events', eventRoutes());
   app.use('/api/views', viewRoutes());
   app.use('/api/feed', feedRoutes());
+  app.use('/api/holidays', holidayRoutes());
   app.use('/api', notFound);
 
   const clientDist = options.clientDist ?? path.resolve(__dirname, '../../client/dist');

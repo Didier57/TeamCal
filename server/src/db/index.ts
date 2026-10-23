@@ -164,6 +164,15 @@ CREATE TABLE email_log (
 ALTER TABLE users ADD COLUMN feed_token TEXT;
 CREATE UNIQUE INDEX idx_users_feed_token ON users(feed_token) WHERE feed_token IS NOT NULL;
 `
+  },
+  {
+    id: 4,
+    sql: `
+ALTER TABLE users ADD COLUMN country TEXT;
+ALTER TABLE events ADD COLUMN holiday_source_id TEXT;
+ALTER TABLE events ADD COLUMN holiday_key TEXT;
+CREATE UNIQUE INDEX idx_events_holiday_key ON events(calendar_id, holiday_key) WHERE holiday_key IS NOT NULL;
+`
   }
 ];
 

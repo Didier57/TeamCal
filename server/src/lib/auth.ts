@@ -19,6 +19,7 @@ export interface UserRow {
   theme: string | null;
   theme_colors: string | null;
   feed_token: string | null;
+  country: string | null;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
@@ -77,6 +78,7 @@ export function publicUser(user: UserRow) {
     theme: user.theme,
     themeColors,
     feedToken: user.feed_token,
+    country: user.country,
     lastLoginAt: user.last_login_at,
     createdAt: user.created_at
   };
