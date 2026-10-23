@@ -44,7 +44,7 @@ function ThemePreview({ theme }: { theme: { light: ThemeColors; dark: ThemeColor
         </div>
         <div
           className="theme-mini-grid"
-          style={{ gridTemplateColumns: '30px repeat(7, minmax(30px, 1fr))' }}
+          style={{ gridTemplateColumns: '24px repeat(7, minmax(22px, 1fr))' }}
         >
           <div
             className="theme-mini-week"
@@ -150,16 +150,9 @@ export function ThemeColorEditor({ value, onChange, showPreview = true }: Props)
                 <input
                   type="color"
                   value={value[kind][field.key]}
+                  title={value[kind][field.key]}
+                  aria-label={`${t(field.label)} ${kind === 'light' ? t('common.light') : t('common.dark')}`}
                   onChange={(event) => update(kind, field.key, event.target.value)}
-                />
-                <input
-                  className="theme-hex"
-                  value={value[kind][field.key]}
-                  onChange={(event) => {
-                    const next = event.target.value;
-                    update(kind, field.key, next);
-                  }}
-                  maxLength={7}
                 />
               </label>
             ))}
