@@ -62,6 +62,14 @@ function formatHeader(key: string, locale: string, options: Intl.DateTimeFormatO
   return new Intl.DateTimeFormat(locale, { ...options, timeZone: 'UTC' }).format(utcDateFromKey(key));
 }
 
+function descriptionText(description: string | null | undefined, html: boolean): string {
+  const value = description?.trim();
+  if (!value) return '';
+  if (!html) return value;
+  const parsed = new DOMParser().parseFromString(value, 'text/html');
+  return (parsed.body.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
 export function PlanningGrid({
   view,
   date,
@@ -211,6 +219,7 @@ export function PlanningGrid({
 
   function chip(occurrence: Occurrence) {
     const color = occurrence.categoryColor ?? occurrence.calendarColor;
+    const description = descriptionText(occurrence.description, settings.allowHtmlDescription);
     return (
       <div
         key={occurrence.id}
@@ -229,7 +238,7 @@ export function PlanningGrid({
           event.stopPropagation();
           onEdit(occurrence);
         }}
-        title={occurrence.title}
+        title={description ? `${occurrence.title}\n\n${description}` : occurrence.title}
       >
         {!occurrence.allDay && <span className="planning-event-time">{timeLabel(occurrence)}</span>}
         <span className="planning-event-title">{occurrence.title}</span>
@@ -241,6 +250,7 @@ export function PlanningGrid({
     const color = occurrence.calendarColor;
     const owner = calendarById.get(occurrence.calendarId)?.ownerName ?? '';
     const time = occurrence.allDay ? '' : timeLabel(occurrence);
+    const description = descriptionText(occurrence.description, settings.allowHtmlDescription);
     return (
       <div
         key={occurrence.id}
@@ -263,7 +273,9 @@ export function PlanningGrid({
           event.stopPropagation();
           onEdit(occurrence);
         }}
-        title={`${owner ? `${owner} · ` : ''}${time ? `${time} · ` : ''}${occurrence.title}`}
+        title={`${owner ? `${owner} · ` : ''}${time ? `${time} · ` : ''}${occurrence.title}${
+          description ? `\n\n${description}` : ''
+        }`}
       >
         {time && <span className="month-event-time">{time}</span>}
         <span className="month-event-title">{occurrence.title}</span>

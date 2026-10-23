@@ -202,6 +202,12 @@ export function CalendarPage() {
     else setDate((current) => addMonths(current, direction));
   }
 
+  function jumpToDate(value: string) {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) return;
+    setDate(new Date(year, month - 1, day, 12));
+  }
+
   function periodLabel(): string {
     if (view === 'day') {
       return new Intl.DateTimeFormat(locale, {
@@ -441,6 +447,14 @@ export function CalendarPage() {
               ›
             </button>
           </div>
+          <input
+            type="date"
+            className="date-jump"
+            value={toDateInput(date.toISOString(), timeZone)}
+            onChange={(event) => jumpToDate(event.target.value)}
+            aria-label={t('calendar.goToDate')}
+            title={t('calendar.goToDate')}
+          />
           <h2 className="period-label">{periodLabel()}</h2>
           <span className="timezone-badge" title={t('event.timezoneHint')}>
             {timeZone}

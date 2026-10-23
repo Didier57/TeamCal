@@ -686,6 +686,16 @@ label small,
   text-transform: capitalize;
 }
 
+.date-jump {
+  width: 148px;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+[data-theme='dark'] .date-jump {
+  color-scheme: dark;
+}
+
 .month-note {
   margin: -4px 0 12px;
 }

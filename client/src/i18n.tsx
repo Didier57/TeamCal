@@ -165,6 +165,7 @@ const fr: Record<string, string> = {
   'event.saveAnyway': 'Enregistrer quand même',
   'event.modify': 'Modifier',
   'event.moreConflicts': '+ {count} autre(s) collision(s)',
+  'calendar.goToDate': 'Aller à une date',
   'calendar.moveConflict':
     'Ce déplacement entre en collision avec {count} événement(s). Voulez-vous quand même le déplacer ?',
   'recurrence.none': 'Aucune répétition',
@@ -514,6 +515,7 @@ const en: Record<string, string> = {
   'event.saveAnyway': 'Save anyway',
   'event.modify': 'Edit',
   'event.moreConflicts': '+ {count} more conflict(s)',
+  'calendar.goToDate': 'Go to date',
   'calendar.moveConflict':
     'This move conflicts with {count} event(s). Move it anyway?',
   'recurrence.none': 'No repetition',
@@ -863,6 +865,7 @@ const de: Record<string, string> = {
   'event.saveAnyway': 'Trotzdem speichern',
   'event.modify': 'Bearbeiten',
   'event.moreConflicts': '+ {count} weitere Kollision(en)',
+  'calendar.goToDate': 'Zu einem Datum springen',
   'calendar.moveConflict':
     'Diese Verschiebung kollidiert mit {count} Termin(en). Trotzdem verschieben?',
   'recurrence.none': 'Keine Wiederholung',
