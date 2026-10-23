@@ -37,8 +37,9 @@ export function AppLayout() {
             {t('nav.calendar')}
           </NavLink>
           <HeaderViewsMenu />
-          {user.isAdmin && <NavLink to="/admin">{t('nav.admin')}</NavLink>}
+          <NavLink to="/search">{t('nav.search')}</NavLink>
           <NavLink to="/preferences">{t('nav.preferences')}</NavLink>
+          {user.isAdmin && <NavLink to="/admin">{t('nav.admin')}</NavLink>}
         </nav>
         <div className="header-tools">
           <select

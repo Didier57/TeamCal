@@ -171,6 +171,19 @@ function categoryInfo(db: any, categoryId: string | null): { color: string | nul
   return { color: row?.color ?? null, name: row?.name ?? null };
 }
 
+function plainDescription(value: string): string {
+  return cleanDescription(value, false)
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim();
+}
+
+const SEARCH_LIMIT = 200;
+
 export function eventRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
@@ -276,6 +289,72 @@ export function eventRoutes(): Router {
       }
       result.sort((a, b) => String(a.start).localeCompare(String(b.start)));
       res.json(result);
+    })
+  );
+
+  router.get(
+    '/search',
+    asyncHandler(async (req, res) => {
+      const query = String(req.query.q ?? '').trim();
+      if (!query) {
+        res.json({ total: 0, results: [] });
+        return;
+      }
+      const needle = query.toLocaleLowerCase();
+      const rows = req.db.prepare('SELECT * FROM events WHERE status <> ?').all('cancelled') as EventRow[];
+      const matches = rows.filter((event) => {
+        const description = plainDescription(event.description);
+        const matchesQuery =
+          event.title.toLocaleLowerCase().includes(needle) ||
+          description.toLocaleLowerCase().includes(needle);
+        return matchesQuery && canViewEvent(req.db, req.user!, event);
+      });
+      matches.sort(
+        (a, b) =>
+          b.start_at.localeCompare(a.start_at) || b.updated_at.localeCompare(a.updated_at)
+      );
+      const limited = matches.slice(0, SEARCH_LIMIT);
+      const eventIds = limited.map((event) => event.id);
+      const participantRows: { event_id: string; first_name: string; last_name: string; username: string }[] =
+        eventIds.length > 0
+          ? (req.db
+              .prepare(
+                `SELECT ep.event_id, u.first_name, u.last_name, u.username
+                 FROM event_participants ep
+                 JOIN users u ON u.id = ep.user_id
+                 WHERE ep.event_id IN (${eventIds.map(() => '?').join(',')})
+                 ORDER BY u.first_name, u.last_name, u.username`
+              )
+              .all(...eventIds) as {
+              event_id: string;
+              first_name: string;
+              last_name: string;
+              username: string;
+            }[])
+          : [];
+      const participantsByEvent = new Map<string, string[]>();
+      for (const row of participantRows) {
+        const name = `${row.first_name} ${row.last_name}`.trim() || row.username;
+        const list = participantsByEvent.get(row.event_id) ?? [];
+        list.push(name);
+        participantsByEvent.set(row.event_id, list);
+      }
+      const results = limited.map((event) => {
+        const category = categoryInfo(req.db, event.category_id);
+        return {
+          id: event.id,
+          title: event.title,
+          description: plainDescription(event.description),
+          start: event.start_at,
+          end: event.end_at,
+          allDay: Boolean(event.all_day),
+          timezone: event.timezone,
+          categoryName: category.name,
+          categoryColor: category.color,
+          participants: participantsByEvent.get(event.id) ?? []
+        };
+      });
+      res.json({ total: matches.length, results });
     })
   );
 

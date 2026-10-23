@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './app-context';
 import { AppLayout } from './components/AppLayout';
 import { CalendarPage } from './pages/CalendarPage';
+import { SearchPage } from './pages/SearchPage';
 import { AdminPage } from './pages/AdminPage';
 import { PreferencesPage } from './pages/PreferencesPage';
 import { LoginPage } from './pages/LoginPage';
@@ -24,6 +25,7 @@ export function App() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<CalendarPage />} />
+        <Route path="/search" element={<SearchPage />} />
         <Route path="/preferences" element={<PreferencesPage />} />
         <Route path="/admin" element={user.isAdmin ? <AdminPage /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

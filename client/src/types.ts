@@ -185,6 +185,24 @@ export interface Occurrence {
   deletable: boolean;
 }
 
+export interface EventSearchResult {
+  id: string;
+  title: string;
+  description: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  timezone: string;
+  categoryName: string | null;
+  categoryColor: string | null;
+  participants: string[];
+}
+
+export interface EventSearchResponse {
+  total: number;
+  results: EventSearchResult[];
+}
+
 export interface EventConflict {
   eventId: string;
   occurrenceStart: string;

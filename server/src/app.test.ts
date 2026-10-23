@@ -383,6 +383,117 @@ describe('TeamCal API', () => {
     expect(moved.body.details.conflicts[0].title).toBe('Bob meeting');
   });
 
+  it('searches events by title and description with permissions', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const category = await agent
+      .post('/api/categories')
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Restauration', color: '#e8590c' });
+    expect(category.status).toBe(201);
+
+    const created = await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'bob',
+        email: 'bob@example.com',
+        firstName: 'Bob',
+        lastName: 'Import',
+        password: 'Password123!'
+      });
+    expect(created.status).toBe(201);
+    const bobId = created.body.id as string;
+
+    const calendars = await agent.get('/api/calendars');
+    const adminCalendar = calendars.body.find((calendar: any) => calendar.ownerName === 'Ada Admin');
+    const bobCalendar = calendars.body.find((calendar: any) => calendar.ownerId === bobId);
+    expect(adminCalendar).toBeTruthy();
+    expect(bobCalendar).toBeTruthy();
+
+    const lunch = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: adminCalendar.id,
+        title: 'Déjeuner équipe',
+        description: '<p>Réservation au restaurant</p>',
+        start: '2026-01-10T12:00:00.000Z',
+        end: '2026-01-10T13:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris',
+        categoryId: category.body.id,
+        participantIds: [bobId]
+      });
+    expect(lunch.status).toBe(201);
+
+    const older = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: adminCalendar.id,
+        title: 'Budget 2027',
+        description: 'Préparation',
+        start: '2026-01-20T09:00:00.000Z',
+        end: '2026-01-20T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+    expect(older.status).toBe(201);
+
+    const newer = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: adminCalendar.id,
+        title: 'Point projet',
+        description: 'budget prévisionnel',
+        start: '2026-01-30T09:00:00.000Z',
+        end: '2026-01-30T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+    expect(newer.status).toBe(201);
+
+    const privateEvent = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: bobCalendar.id,
+        title: 'Budget privé',
+        start: '2026-02-01T09:00:00.000Z',
+        end: '2026-02-01T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+    expect(privateEvent.status).toBe(201);
+
+    const adminSearch = await agent.get('/api/events/search?q=budget');
+    expect(adminSearch.status).toBe(200);
+    expect(adminSearch.body.total).toBe(3);
+    expect(adminSearch.body.results.map((item: any) => item.title)).toEqual([
+      'Budget privé',
+      'Point projet',
+      'Budget 2027'
+    ]);
+
+    const lunchSearch = await agent.get('/api/events/search?q=D%C3%89JEUNER');
+    expect(lunchSearch.status).toBe(200);
+    expect(lunchSearch.body.results).toHaveLength(1);
+    expect(lunchSearch.body.results[0].description).toBe('Réservation au restaurant');
+    expect(lunchSearch.body.results[0].categoryName).toBe('Restauration');
+    expect(lunchSearch.body.results[0].participants).toEqual(['Bob Import']);
+
+    const bobAgent = request.agent(app);
+    const bobLogin = await bobAgent
+      .post('/api/auth/login')
+      .send({ username: 'bob', password: 'Password123!' });
+    expect(bobLogin.status).toBe(200);
+    const bobSearch = await bobAgent.get('/api/events/search?q=budget');
+    expect(bobSearch.status).toBe(200);
+    expect(bobSearch.body.total).toBe(1);
+    expect(bobSearch.body.results[0].title).toBe('Budget privé');
+  });
+
   it('manages manual holidays and keeps adjustments across syncs', async () => {
     const { agent, csrf } = await setupAdmin(app);
     const pref = await agent
