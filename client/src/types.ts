@@ -97,6 +97,16 @@ export interface AdminHoliday {
   manual: boolean;
 }
 
+export interface ImportIcsResult {
+  imported: number;
+  updated: number;
+  skipped: number;
+  exceptions: number;
+  categoriesMatched: number;
+  unmatchedCategories: string[];
+  warnings: string[];
+}
+
 export interface AdminSettings extends PublicSettings {
   holidaySources: HolidaySource[];
   smtp: {

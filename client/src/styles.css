@@ -462,7 +462,7 @@ label small,
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
-.header-views-slot {
+.header-views-menu {
   display: inline-flex;
   align-items: center;
 }
@@ -474,7 +474,7 @@ label small,
   color: var(--color-muted);
 }
 
-.header-views-slot .menu-popover {
+.header-views-menu .menu-popover {
   left: 0;
   right: auto;
 }
@@ -1163,6 +1163,28 @@ label small,
   .holiday-manual-form {
     grid-template-columns: 1fr;
   }
+}
+
+.import-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+
+.import-result h3 {
+  margin-bottom: 12px;
+}
+
+.import-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-bottom: 8px;
+  font-size: 13.5px;
+}
+
+.import-stats strong {
+  color: var(--color-primary);
 }
 
 .table-wrap {

@@ -433,6 +433,93 @@ describe('TeamCal API', () => {
     expect(afterDeleteSync.body).toHaveLength(0);
   });
 
+  it('imports ICS events into a user calendar with category matching and no duplicates', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const category = await agent
+      .post('/api/categories')
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Travail', color: '#2f6feb' });
+    expect(category.status).toBe(201);
+    const created = await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'bob',
+        email: 'bob@example.com',
+        firstName: 'Bob',
+        lastName: 'Import',
+        password: 'Password123!'
+      });
+    const bobId = created.body.id as string;
+    const calendars = await agent.get('/api/calendars');
+    const bobCalendar = calendars.body.find((calendar: any) => calendar.ownerId === bobId);
+    expect(bobCalendar).toBeTruthy();
+
+    const content = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//TeamCal test//EN',
+      'BEGIN:VEVENT',
+      'UID:source-1',
+      'DTSTAMP:20260101T000000Z',
+      'DTSTART;TZID=Europe/Paris:20270115T100000',
+      'DTEND;TZID=Europe/Paris:20270115T110000',
+      'SUMMARY:Réunion importée',
+      'CATEGORIES:Travail,Autre',
+      'DESCRIPTION:Ligne 1\\nLigne 2',
+      'END:VEVENT',
+      'BEGIN:VEVENT',
+      'UID:source-2',
+      'DTSTART;VALUE=DATE:20270201',
+      'DTEND;VALUE=DATE:20270203',
+      'SUMMARY:Deux jours',
+      'CATEGORIES:Inconnue',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const emailCount = () =>
+      (db.prepare('SELECT COUNT(*) AS count FROM email_log').get() as { count: number }).count;
+    const emailsBefore = emailCount();
+
+    const imported = await agent
+      .post('/api/import/ics')
+      .set('X-CSRF-Token', csrf)
+      .send({ userId: bobId, defaultCategoryId: null, content });
+    expect(imported.status).toBe(201);
+    expect(imported.body.imported).toBe(2);
+    expect(imported.body.updated).toBe(0);
+    expect(imported.body.categoriesMatched).toBe(1);
+    expect(imported.body.unmatchedCategories).toEqual(['Inconnue']);
+
+    const events = await agent.get(
+      `/api/events?start=2027-01-01T00:00:00.000Z&end=2027-03-01T00:00:00.000Z&calendarIds=${bobCalendar.id}`
+    );
+    expect(events.body).toHaveLength(2);
+    const meeting = events.body.find((event: any) => event.title === 'Réunion importée');
+    expect(meeting).toBeTruthy();
+    expect(meeting.start).toBe('2027-01-15T09:00:00.000Z');
+    expect(meeting.categoryId).toBe(category.body.id);
+    expect(meeting.participantIds).toEqual([]);
+    const allDay = events.body.find((event: any) => event.title === 'Deux jours');
+    expect(allDay.allDay).toBe(true);
+    expect(allDay.start).toBe('2027-02-01');
+    expect(allDay.end).toBe('2027-02-02');
+    expect(emailCount()).toBe(emailsBefore);
+
+    const repeated = await agent
+      .post('/api/import/ics')
+      .set('X-CSRF-Token', csrf)
+      .send({ userId: bobId, content });
+    expect(repeated.status).toBe(201);
+    expect(repeated.body.imported).toBe(0);
+    expect(repeated.body.updated).toBe(2);
+    const afterRepeat = await agent.get(
+      `/api/events?start=2027-01-01T00:00:00.000Z&end=2027-03-01T00:00:00.000Z&calendarIds=${bobCalendar.id}`
+    );
+    expect(afterRepeat.body).toHaveLength(2);
+  });
+
   it('prevents non-admins from reading administration settings', async () => {
     const { agent, csrf } = await setupAdmin(app);
     await agent

@@ -3,6 +3,7 @@ import { apiPut } from '../api';
 import { useAuth } from '../app-context';
 import { languageLabel, useI18n } from '../i18n';
 import type { Language, User } from '../types';
+import { HeaderViewsMenu } from './HeaderViewsMenu';
 
 export function AppLayout() {
   const { user, settings, logout, theme, setTheme, setUser } = useAuth();
@@ -35,7 +36,7 @@ export function AppLayout() {
           <NavLink to="/" end>
             {t('nav.calendar')}
           </NavLink>
-          <span id="header-views-slot" className="header-views-slot" />
+          <HeaderViewsMenu />
           {user.isAdmin && <NavLink to="/admin">{t('nav.admin')}</NavLink>}
           <NavLink to="/preferences">{t('nav.preferences')}</NavLink>
         </nav>

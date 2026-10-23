@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PlanningGrid } from '../components/PlanningGrid';
 import { apiGet, apiPatch, apiPut, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
@@ -78,24 +78,35 @@ export function CalendarPage() {
   const [timezoneNoticeDismissed, setTimezoneNoticeDismissed] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [viewsOpen, setViewsOpen] = useState(false);
-  const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
-  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
-  const [activeViewId, setActiveViewId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const flashTimer = useRef<number | null>(null);
-  const viewsMenuRef = useRef<HTMLDivElement>(null);
+
+  const requestedViewId = searchParams.get('view');
 
   useEffect(() => {
-    if (!viewsMenuOpen) return;
-    const handler = (event: MouseEvent) => {
-      if (!viewsMenuRef.current?.contains(event.target as Node)) setViewsMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [viewsMenuOpen]);
+    if (searchParams.get('manageViews') !== '1') return;
+    setViewsOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('manageViews');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
-  useLayoutEffect(() => {
-    setHeaderSlot(document.getElementById('header-views-slot'));
-  }, []);
+  useEffect(() => {
+    if (!requestedViewId || calendars.length === 0) return;
+    if (requestedViewId === 'all') {
+      setSelected(calendars.filter((calendar) => calendar.canView).map((calendar) => calendar.id));
+      return;
+    }
+    const requestedView = views.find((customView) => customView.id === requestedViewId);
+    if (!requestedView) return;
+    setSelected(
+      calendars
+        .filter(
+          (calendar) => requestedView.userIds.includes(calendar.ownerId) && calendar.canView
+        )
+        .map((calendar) => calendar.id)
+    );
+  }, [requestedViewId, views, calendars]);
 
   const firstDay = settings?.firstDay ?? 1;
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -130,9 +141,7 @@ export function CalendarPage() {
           )
           .map((calendar) => calendar.id)
       );
-      setActiveViewId(preferredView.id);
     } else {
-      setActiveViewId(null);
       setSelected(calendarList.filter((calendar) => calendar.canView).map((calendar) => calendar.id));
     }
   }, [user?.defaultView]);
@@ -175,26 +184,6 @@ export function CalendarPage() {
     () => selectedCalendars.find((calendar) => calendar.canCreate) ?? calendars.find((c) => c.canCreate),
     [selectedCalendars, calendars]
   );
-
-  const allViewableCalendars = useMemo(
-    () => calendars.filter((calendar) => calendar.canView).map((calendar) => calendar.id),
-    [calendars]
-  );
-
-  function applyView(customView: CustomView) {
-    const ids = calendars
-      .filter((calendar) => customView.userIds.includes(calendar.ownerId) && calendar.canView)
-      .map((calendar) => calendar.id);
-    setSelected(ids);
-    setActiveViewId(customView.id);
-    setViewsMenuOpen(false);
-  }
-
-  function showAllResources() {
-    setSelected(allViewableCalendars);
-    setActiveViewId(null);
-    setViewsMenuOpen(false);
-  }
 
   function shiftDate(direction: number) {
     if (view === 'day') setDate((current) => addDays(current, direction));
@@ -355,55 +344,8 @@ export function CalendarPage() {
 
   if (!settings) return null;
 
-  const viewsMenu = (
-    <div className="toolbar-menu header-views-menu" ref={viewsMenuRef}>
-      <button
-        type="button"
-        className="button ghost nav-menu-button"
-        onClick={() => setViewsMenuOpen((current) => !current)}
-      >
-        {t('nav.views')} ▾
-      </button>
-      {viewsMenuOpen && (
-        <div className="menu-popover">
-          <button
-            type="button"
-            className={`menu-item ${activeViewId === null ? 'active' : ''}`}
-            onClick={showAllResources}
-          >
-            {t('calendar.allResources')}
-          </button>
-          {views.length > 0 && <div className="menu-divider" />}
-          {views.map((customView) => (
-            <button
-              key={customView.id}
-              type="button"
-              className={`menu-item ${activeViewId === customView.id ? 'active' : ''}`}
-              onClick={() => applyView(customView)}
-            >
-              <span>{customView.name}</span>
-              <small>{customView.isShared ? t('views.global') : t('views.personal')}</small>
-            </button>
-          ))}
-          <div className="menu-divider" />
-          <button
-            type="button"
-            className="menu-item"
-            onClick={() => {
-              setViewsMenuOpen(false);
-              setViewsOpen(true);
-            }}
-          >
-            {t('calendar.manageViews')}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <div className="calendar-page">
-      {headerSlot && createPortal(viewsMenu, headerSlot)}
       <section className="calendar-main">
         {timeZone !== browserTimeZone && !timezoneNoticeDismissed && (
           <div className="alert info timezone-alert">

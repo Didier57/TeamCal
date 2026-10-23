@@ -16,6 +16,7 @@ import { eventRoutes } from './modules/events';
 import { viewRoutes } from './modules/views';
 import { feedRoutes } from './modules/feed';
 import { holidayRoutes } from './modules/holidays';
+import { importRoutes } from './modules/import';
 
 export interface AppOptions {
   clientDist?: string;
@@ -34,7 +35,7 @@ export function createApp(db: DB, options: AppOptions = {}) {
     res.setHeader('Referrer-Policy', 'same-origin');
     next();
   });
-  app.use(express.json({ limit: '1mb' }));
+  app.use(express.json({ limit: '12mb' }));
   app.use(cookieParser());
   app.use(sessionMiddleware);
   app.use(csrfMiddleware);
@@ -64,6 +65,7 @@ export function createApp(db: DB, options: AppOptions = {}) {
   app.use('/api/views', viewRoutes());
   app.use('/api/feed', feedRoutes());
   app.use('/api/holidays', holidayRoutes());
+  app.use('/api/import', importRoutes());
   app.use('/api', notFound);
 
   const clientDist = options.clientDist ?? path.resolve(__dirname, '../../client/dist');
