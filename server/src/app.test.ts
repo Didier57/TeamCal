@@ -319,6 +319,70 @@ describe('TeamCal API', () => {
     expect(movedAnyway.status).toBe(200);
   });
 
+  it('expands recurrences in their timezone and detects conflicts when changing owner', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const created = await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'bob',
+        email: 'bob@example.com',
+        firstName: 'Bob',
+        lastName: 'User',
+        password: 'Password123!'
+      });
+    expect(created.status).toBe(201);
+
+    const calendars = await agent.get('/api/calendars');
+    const adminCalendar = calendars.body.find((c: any) => c.ownerName === 'Ada Admin');
+    const bobCalendar = calendars.body.find((c: any) => c.ownerId === created.body.id);
+    expect(adminCalendar).toBeTruthy();
+    expect(bobCalendar).toBeTruthy();
+
+    const recurring = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: adminCalendar.id,
+        title: 'Recurring sync',
+        start: '2026-07-01T09:00:00.000Z',
+        end: '2026-07-01T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris',
+        recurrence: { frequency: 'daily', interval: 1, count: 3 }
+      });
+    expect(recurring.status).toBe(201);
+
+    const occurrences = await agent.get(
+      `/api/events?start=2026-07-01T00:00:00.000Z&end=2026-07-05T00:00:00.000Z&calendarIds=${adminCalendar.id}`
+    );
+    expect(occurrences.body).toHaveLength(3);
+    expect(occurrences.body[0].start).toBe('2026-07-01T09:00:00.000Z');
+    expect(occurrences.body[1].start).toBe('2026-07-02T09:00:00.000Z');
+
+    const single = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: bobCalendar.id,
+        title: 'Bob meeting',
+        start: '2026-07-02T09:30:00.000Z',
+        end: '2026-07-02T10:30:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+    expect(single.status).toBe(201);
+
+    const moved = await agent
+      .patch(`/api/events/${recurring.body.eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ calendarId: bobCalendar.id, scope: 'series' });
+    expect(moved.status).toBe(409);
+    expect(moved.body.error).toBe('event_conflict');
+    expect(moved.body.details.total).toBe(1);
+    expect(moved.body.details.conflicts[0].title).toBe('Bob meeting');
+  });
+
   it('manages manual holidays and keeps adjustments across syncs', async () => {
     const { agent, csrf } = await setupAdmin(app);
     const pref = await agent

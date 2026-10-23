@@ -1,6 +1,6 @@
 import { RRule } from 'rrule';
 import type { EventRow } from './permissions';
-import { utcAsWallClock } from './time';
+import { utcAsWallClock, wallClockAsUtc } from './time';
 
 export interface ExceptionRow {
   id: string;
@@ -104,7 +104,7 @@ export function expandEvent(
   }
 
   const timezone = event.timezone || 'UTC';
-  const startWall = utcAsWallClock(new Date(event.start_at), timezone);
+  const startWall = wallClockAsUtc(new Date(event.start_at), timezone);
   let rule: RRule;
   try {
     rule = new RRule({
@@ -114,8 +114,8 @@ export function expandEvent(
   } catch {
     return [];
   }
-  const fromWall = utcAsWallClock(new Date(from.getTime() - 86400000), timezone);
-  const toWall = utcAsWallClock(new Date(to.getTime() + 86400000), timezone);
+  const fromWall = wallClockAsUtc(new Date(from.getTime() - 86400000), timezone);
+  const toWall = wallClockAsUtc(new Date(to.getTime() + 86400000), timezone);
   const occurrences = rule.between(fromWall, toWall, true).slice(0, limit);
   const result: Occurrence[] = [];
   for (const occurrence of occurrences) {

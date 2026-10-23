@@ -26,7 +26,6 @@ export function AppLayout() {
     <div className="app-shell">
       <header className="app-header">
         <div className="brand">
-          <span className="brand-mark">TC</span>
           <div>
             <strong>{settings.appName}</strong>
             <small>{t('app.tagline')}</small>
