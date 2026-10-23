@@ -14,14 +14,20 @@ interface Recipient {
   email: string;
   name: string;
   language: string;
+  timezone: string | null;
 }
 
 function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipient[] {
-  const ids = Array.from(new Set([event.owner_id, ...(extraUserIds ?? [])]));
+  const participantIds = (
+    db.prepare('SELECT user_id FROM event_participants WHERE event_id = ?').all(event.id) as {
+      user_id: string;
+    }[]
+  ).map((row) => row.user_id);
+  const ids = Array.from(new Set([event.owner_id, ...participantIds, ...(extraUserIds ?? [])]));
   const placeholders = ids.map(() => '?').join(',');
   const rows = db
     .prepare(
-      `SELECT u.id, u.email, u.language, u.first_name, u.last_name
+      `SELECT u.id, u.email, u.language, u.timezone, u.first_name, u.last_name
        FROM users u
        WHERE u.id IN (${placeholders})`
     )
@@ -29,6 +35,7 @@ function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipi
     id: string;
     email: string;
     language: string;
+    timezone: string | null;
     first_name: string;
     last_name: string;
   }[];
@@ -43,6 +50,7 @@ function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipi
       id: r.id,
       email: r.email,
       language: r.language,
+      timezone: r.timezone,
       name: `${r.first_name} ${r.last_name}`.trim() || r.email
     }));
 }
@@ -129,13 +137,19 @@ export async function notifyEvent(
         : action === 'updated'
           ? texts.updatedSubject(event.title)
           : texts.cancelledSubject(event.title);
+    const displayTimeZone = recipient.timezone || event.timezone;
     const when = event.all_day
-      ? formatDate(event.start_at, true, event.timezone, recipient.language)
-      : `${formatDate(event.start_at, false, event.timezone, recipient.language)} - ${formatDate(event.end_at, false, event.timezone, recipient.language)}`;
+      ? formatDate(event.start_at, true, displayTimeZone, recipient.language)
+      : `${formatDate(event.start_at, false, displayTimeZone, recipient.language)} - ${formatDate(event.end_at, false, displayTimeZone, recipient.language)}`;
+    const attendees = recipients
+      .filter((r) => r.email.toLowerCase() !== organizer.email.toLowerCase())
+      .map((r) => ({ name: r.name, email: r.email }));
+    const method: 'REQUEST' | 'CANCEL' | 'PUBLISH' =
+      action === 'cancelled' ? 'CANCEL' : attendees.length > 0 ? 'REQUEST' : 'PUBLISH';
     const ics = buildIcs({
       uid: event.uid,
       sequence: event.sequence,
-      method: action === 'cancelled' ? 'CANCEL' : 'REQUEST',
+      method,
       title: event.title,
       description: event.description,
       location: event.location,
@@ -145,7 +159,7 @@ export async function notifyEvent(
       allDay: Boolean(event.all_day),
       rrule: event.rrule,
       organizer,
-      attendees: recipients.map((r) => ({ name: r.name, email: r.email })),
+      attendees,
       cancelled: action === 'cancelled'
     });
     const gcal = googleCalendarUrl({
@@ -163,7 +177,7 @@ export async function notifyEvent(
       ${event.location ? `<p><strong>${escapeHtml(texts.where)} :</strong> ${escapeHtml(event.location)}</p>` : ''}
       ${event.description ? `<p><strong>${escapeHtml(texts.details)} :</strong><br>${escapeHtml(event.description).replace(/\n/g, '<br>')}</p>` : ''}
       <p><strong>${escapeHtml(texts.organizer)} :</strong> ${escapeHtml(organizer.name)}</p>
-      <p><a href="${gcal}">Google Calendar</a></p>
+      <p><a href="${escapeHtml(gcal)}">Google Calendar</a></p>
       <p style="color:#64748b;font-size:12px">${escapeHtml(texts.addToCalendar)}<br>${escapeHtml(texts.footer)}</p>
     </body></html>`;
     try {
@@ -174,11 +188,13 @@ export async function notifyEvent(
         subject,
         html,
         text: `${event.title}\n${texts.intro(action)}\n${texts.when}: ${when}`,
-        icalEvent: {
-          filename: 'invitation.ics',
-          method: action === 'cancelled' ? 'CANCEL' : 'REQUEST',
-          content: ics
-        }
+        attachments: [
+          {
+            filename: 'invitation.ics',
+            content: ics,
+            contentType: `text/calendar; charset=utf-8; method=${method}`
+          }
+        ]
       });
       db.prepare(
         'INSERT INTO email_log (id, recipient, subject, status, error, event_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'

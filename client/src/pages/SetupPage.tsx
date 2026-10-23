@@ -17,12 +17,23 @@ const timezones = [
   'UTC'
 ];
 
+const browserTimeZone =
+  typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'Europe/Paris';
+
+const timezoneOptions = timezones.includes(browserTimeZone)
+  ? timezones
+  : [browserTimeZone, ...timezones];
+
 export function SetupPage() {
   const { setup, settings } = useAuth();
   const { t, language, setLanguage, errorMessage } = useI18n();
   const [appName, setAppName] = useState(settings?.appName ?? 'TeamCal');
   const [baseUrl, setBaseUrl] = useState(window.location.origin);
-  const [timezone, setTimezone] = useState(settings?.defaultTimezone ?? 'Europe/Paris');
+  const [timezone, setTimezone] = useState(
+    settings?.defaultTimezone && settings.defaultTimezone !== 'Europe/Paris'
+      ? settings.defaultTimezone
+      : browserTimeZone || 'Europe/Paris'
+  );
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
@@ -83,7 +94,7 @@ export function SetupPage() {
             <label>
               <span>{t('common.timezone')}</span>
               <select value={timezone} onChange={(event) => setTimezone(event.target.value)}>
-                {timezones.map((tz) => (
+                {timezoneOptions.map((tz) => (
                   <option key={tz} value={tz}>
                     {tz}
                   </option>

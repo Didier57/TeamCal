@@ -24,8 +24,9 @@ Application web de gestion de planning d'équipe : calendriers multi-utilisateur
 - Assistant de première installation : création du compte administrateur et des paramètres initiaux depuis l'interface web.
 - Administration : utilisateurs (création, modification, désactivation, réinitialisation de mot de passe), catégories, paramètres généraux, champs d'événement activables, thèmes, SMTP.
 - Calendriers personnels par utilisateur avec permissions déléguées (consulter / ajouter / modifier / supprimer).
-- Vues jour, semaine et mois, numéros de semaine, premier jour de semaine, heures de travail, fuseau horaire et formats configurables.
-- Glisser-déposer et redimensionnement des événements, avec confirmation occurrence/série pour les événements récurrents.
+- Un seul calendrier par vue, avec les utilisateurs en lignes (jour, semaine, mois), navigation synchronisée et numéros de semaine.
+- Vues jour, semaine et mois, premier jour de semaine, heures de travail, fuseau horaire et formats configurables.
+- Glisser-déposer des événements entre jours et entre utilisateurs ; durée modifiable via le formulaire ; confirmation occurrence/série pour les événements récurrents.
 - Événements : titre, dates, journée entière, description (texte ou HTML assaini), lieu, URL, priorité, visibilité, catégorie, participants, récurrence.
 - Récurrences quotidiennes, hebdomadaires, mensuelles et annuelles avec intervalle, jours de semaine, date de fin ou nombre d'occurrences ; exceptions et occurrences déplacées ou annulées.
 - Vues personnalisées (personnelles ou partagées) sélectionnant des ressources.
@@ -39,7 +40,7 @@ Application web de gestion de planning d'équipe : calendriers multi-utilisateur
 | --- | --- |
 | Backend | Node.js 24, Express 4, TypeScript |
 | Base de données | SQLite (`better-sqlite3`), mode WAL, migrations versionnées |
-| Frontend | React 18, Vite, TypeScript, FullCalendar 6 |
+| Frontend | React 18, Vite, TypeScript, grille planning personnalisée |
 | E-mails | Nodemailer + génération iCalendar interne |
 | Déploiement | Dockerfile multi-étapes, `compose.yaml`, GitHub Actions, GHCR |
 
@@ -189,6 +190,14 @@ Déployez un tag précédent puis redémarrez :
 TEAMCAL_VERSION=0.1.0 docker compose up -d
 ```
 
+### Fuseau horaire
+
+Le calendrier affiche le fuseau effectif de l'utilisateur dans un badge à côté de la période. Si ce fuseau diffère de celui du navigateur, un bandeau propose de basculer sur le fuseau du navigateur (ou de le faire depuis **Préférences**). Un événement reste stocké en UTC : changer de fuseau modifie l'affichage, pas l'instant enregistré.
+
+### E-mails
+
+Les invitations sont envoyées en HTML avec une pièce jointe `invitation.ics` de type `text/calendar` (`METHOD:REQUEST` pour les participants, `PUBLISH` pour une notification au propriétaire, `CANCEL` pour une annulation). Le lien Google Agenda est généré au format natif. En cas d'échec SMTP, l'événement reste enregistré et l'erreur est visible dans la table `email_log`.
+
 ## API
 
 Toutes les routes sont préfixées par `/api`. Authentification par cookie de session ; les mutations exigent l'en-tête `X-CSRF-Token` fourni par `/api/auth/me`.
@@ -253,7 +262,7 @@ TeamCal/
 
 ## Choix et limites
 
-- **FullCalendar gratuit** : les vues « ressources » timeline relèvent de FullCalendar Premium. TeamCal simule les ressources par des colonnes de calendriers synchronisées en vues jour et semaine ; la vue mois affiche une grille unique colorée par catégorie. Aucune licence Premium n'est requise.
+- **Grille planning sans FullCalendar Premium** : le planning est rendu par une grille React unique avec les utilisateurs en lignes et les jours (ou heures) en colonnes. Aucune licence FullCalendar n'est nécessaire. Le glisser-déposer déplace un événement vers un autre jour ou un autre utilisateur ; la durée se modifie dans le formulaire.
 - **SQLite** : adapté à une équipe (quelques dizaines d'utilisateurs). Le fichier est stocké dans un volume persistant et sauvegardable à chaud.
 - **Récurrences** : expansion côté serveur avec gestion des exceptions ; les règles prennent en charge fréquence, intervalle, jours de semaine, `UNTIL` et `COUNT`.
 - **Configuration** : volontairement en base plutôt qu'en variables d'environnement, pour être modifiable depuis l'interface et éviter les secrets dans les fichiers.

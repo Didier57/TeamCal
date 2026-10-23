@@ -29,6 +29,10 @@ function escapeText(value: string): string {
     .replace(/,/g, '\\,');
 }
 
+function quoteParam(value: string): string {
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
 function foldLine(line: string): string {
   const bytes = Buffer.from(line, 'utf8');
   if (bytes.length <= 75) return line;
@@ -96,12 +100,12 @@ export function buildIcs(input: IcsInput): string {
   if (input.url) lines.push(`URL:${input.url}`);
   if (input.organizer) {
     lines.push(
-      `ORGANIZER;CN=${escapeText(input.organizer.name)}:mailto:${input.organizer.email}`
+      `ORGANIZER;CN=${quoteParam(input.organizer.name)}:mailto:${input.organizer.email}`
     );
   }
   for (const attendee of input.attendees) {
     lines.push(
-      `ATTENDEE;CN=${escapeText(attendee.name)};ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:${attendee.email}`
+      `ATTENDEE;CUTYPE=INDIVIDUAL;CN=${quoteParam(attendee.name)};ROLE=REQ-PARTICIPANT;RSVP=TRUE;PARTSTAT=NEEDS-ACTION:mailto:${attendee.email}`
     );
   }
   lines.push(`STATUS:${input.cancelled ? 'CANCELLED' : 'CONFIRMED'}`);
@@ -122,12 +126,12 @@ export function googleCalendarUrl(input: {
   const dates = input.allDay
     ? `${dateValue(input.start)}/${dateValue(nextDay(input.end))}`
     : `${utcStamp(new Date(input.start))}/${utcStamp(new Date(input.end))}`;
-  const params = new URLSearchParams({
-    action: 'TEMPLATE',
-    text: input.title,
-    dates,
-    details: input.description ?? '',
-    location: input.location ?? ''
-  });
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  const params = [
+    'action=TEMPLATE',
+    `text=${encodeURIComponent(input.title)}`,
+    `dates=${dates}`,
+    `details=${encodeURIComponent(input.description ?? '')}`,
+    `location=${encodeURIComponent(input.location ?? '')}`
+  ];
+  return `https://calendar.google.com/calendar/render?${params.join('&')}`;
 }

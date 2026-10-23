@@ -5,9 +5,10 @@ import { defaultRecurrence } from '../recurrence-utils';
 interface Props {
   value: Recurrence | null;
   onChange: (value: Recurrence | null) => void;
+  startDate?: string;
 }
 
-export function RecurrenceEditor({ value, onChange }: Props) {
+export function RecurrenceEditor({ value, onChange, startDate }: Props) {
   const { t, locale } = useI18n();
   const weekdayLabels = Array.from({ length: 7 }, (_, index) =>
     new Intl.DateTimeFormat(locale, { weekday: 'short' }).format(new Date(Date.UTC(2024, 0, 1 + index)))
@@ -63,7 +64,7 @@ export function RecurrenceEditor({ value, onChange }: Props) {
                   ? t('common.week')
                   : value.frequency === 'monthly'
                     ? t('common.month')
-                    : 'an'}
+                    : t('common.year')}
             </span>
           </label>
           {value.frequency === 'weekly' && (
@@ -90,9 +91,17 @@ export function RecurrenceEditor({ value, onChange }: Props) {
             <select
               value={endMode}
               onChange={(event) => {
-                if (event.target.value === 'never') update({ until: null, count: null });
-                else if (event.target.value === 'until') update({ count: null });
-                else update({ until: null });
+                const mode = event.target.value;
+                if (mode === 'never') {
+                  update({ until: null, count: null });
+                } else if (mode === 'until') {
+                  update({
+                    count: null,
+                    until: value?.until ?? startDate ?? new Date().toISOString().slice(0, 10)
+                  });
+                } else {
+                  update({ until: null, count: value?.count ?? 10 });
+                }
               }}
             >
               <option value="never">{t('recurrence.endsNever')}</option>

@@ -17,6 +17,11 @@ const timezones = [
   'UTC'
 ];
 
+const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const timezoneChoices = timezones.includes(browserTimeZone)
+  ? timezones
+  : [browserTimeZone, ...timezones];
+
 export function PreferencesPage() {
   const { user, settings, setUser, setTheme } = useAuth();
   const { t, errorMessage, setLanguage } = useI18n();
@@ -128,12 +133,15 @@ export function PreferencesPage() {
             <span>{t('common.timezone')}</span>
             <select value={timezone} onChange={(event) => setTimezone(event.target.value)}>
               <option value="">{settings.defaultTimezone}</option>
-              {timezones.map((tz) => (
+              {timezoneChoices.map((tz) => (
                 <option key={tz} value={tz}>
                   {tz}
                 </option>
               ))}
             </select>
+            <button type="button" className="link" onClick={() => setTimezone(browserTimeZone)}>
+              {t('prefs.useBrowserTimeZone')} ({browserTimeZone})
+            </button>
           </label>
           <label>
             <span>{t('prefs.dateFormat')}</span>

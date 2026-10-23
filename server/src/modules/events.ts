@@ -357,6 +357,17 @@ export function eventRoutes(): Router {
         details: { title: body.title, calendarId: calendar.id },
         ip: req.ip
       });
+      logger.info('event_saved', {
+        eventId: event.id,
+        start: event.start_at,
+        end: event.end_at,
+        timezone: event.timezone,
+        requestedStart: validated.start,
+        requestedTimezone: body.timezone,
+        userTimezone: req.user!.timezone,
+        calendarId: event.calendar_id,
+        userId: req.user!.id
+      });
       notifyEvent(req.db, settings, event, 'created').catch((error) =>
         logger.error('notify_failed', { error: error instanceof Error ? error.message : String(error) })
       );
@@ -477,13 +488,14 @@ export function eventRoutes(): Router {
       req.db.transaction(() => {
         req.db
           .prepare(
-            `UPDATE events SET calendar_id = ?, title = ?, description = ?, start_at = ?, end_at = ?,
+            `UPDATE events SET calendar_id = ?, owner_id = ?, title = ?, description = ?, start_at = ?, end_at = ?,
                all_day = ?, timezone = ?, location = ?, url = ?, priority = ?, visibility = ?,
                category_id = ?, rrule = ?, recurrence_until = ?, sequence = sequence + 1, updated_at = ?
              WHERE id = ?`
           )
           .run(
             merged.calendarId,
+            access.calendar.owner_id,
             merged.title,
             validated.description,
             validated.start,

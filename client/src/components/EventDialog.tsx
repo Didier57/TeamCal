@@ -84,6 +84,7 @@ export function EventDialog({
   const { t, errorMessage } = useI18n();
   const { user } = useAuth();
   const timeZone = useEffectiveTimeZone();
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [form, setForm] = useState<EventDraft>(draft);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -356,6 +357,12 @@ export function EventDialog({
                   required
                 />
               </label>
+              <div className="span-2 timezone-hint">
+                <small>
+                  {t('event.timezoneHint')} : {timeZone}
+                  {browserTimeZone && browserTimeZone !== timeZone ? ` — ${browserTimeZone}` : ''}
+                </small>
+              </div>
               {settings.fields.location && (
                 <label>
                   <span>{t('event.location')}</span>
@@ -466,6 +473,7 @@ export function EventDialog({
                   <RecurrenceEditor
                     value={form.recurrence}
                     onChange={(value) => update('recurrence', value)}
+                    startDate={form.startInput.slice(0, 10)}
                   />
                 </div>
               )}

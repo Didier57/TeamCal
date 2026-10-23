@@ -1,27 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarInstance } from '../components/CalendarInstance';
-import timeGridPlugin from '@fullcalendar/timegrid';
-import dayGridPlugin from '@fullcalendar/daygrid';
-import interactionPlugin from '@fullcalendar/interaction';
-import frLocale from '@fullcalendar/core/locales/fr';
-import enLocale from '@fullcalendar/core/locales/en-gb';
-import deLocale from '@fullcalendar/core/locales/de';
-import type { EventInput } from '@fullcalendar/core';
-import { apiGet, apiPatch, ApiError } from '../api';
+import { PlanningGrid } from '../components/PlanningGrid';
+import { apiGet, apiPatch, apiPut, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { useI18n } from '../i18n';
-import {
-  addDaysToDateKey,
-  formatDate,
-  formatDateTimeRange,
-  toDateInput,
-  toDateTimeInput
-} from '../format';
+import { formatDate, toDateInput, toDateTimeInput } from '../format';
 import type { Calendar, Category, CustomView, Occurrence, User, ViewKind } from '../types';
 import { EventDialog, draftFromOccurrence, type EventDraft } from '../components/EventDialog';
 import { ViewsDialog } from '../components/ViewsDialog';
-
-const locales = { fr: frLocale, en: enLocale, de: deLocale };
 
 interface DialogState {
   mode: 'create' | 'edit';
@@ -63,8 +48,8 @@ function rangeFor(date: Date, view: ViewKind, firstDay: number): { start: Date; 
 }
 
 export function CalendarPage() {
-  const { user, settings } = useAuth();
-  const { t, language, locale, errorMessage } = useI18n();
+  const { user, settings, refresh } = useAuth();
+  const { t, locale, errorMessage } = useI18n();
   const timeZone = useEffectiveTimeZone();
   const [calendars, setCalendars] = useState<Calendar[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -77,11 +62,13 @@ export function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
+  const [timezoneNoticeDismissed, setTimezoneNoticeDismissed] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [viewsOpen, setViewsOpen] = useState(false);
   const flashTimer = useRef<number | null>(null);
 
   const firstDay = settings?.firstDay ?? 1;
+  const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const storageKey = `teamcal_selected_${user?.id ?? 'anon'}`;
 
   const showFlash = useCallback((message: string) => {
@@ -150,7 +137,7 @@ export function CalendarPage() {
     } catch {
       setError(t('calendar.error'));
     }
-  }, [date, view, firstDay, selected, t]);
+  }, [date, view, firstDay, selected, timeZone, t]);
 
   useEffect(() => {
     void loadEvents();
@@ -165,33 +152,6 @@ export function CalendarPage() {
     () => selectedCalendars.find((calendar) => calendar.canCreate) ?? calendars.find((c) => c.canCreate),
     [selectedCalendars, calendars]
   );
-
-  const fcEvents = useMemo(
-    () =>
-      events.map<EventInput>((occurrence) => ({
-        id: occurrence.id,
-        title: occurrence.title,
-        start: occurrence.start,
-        end: occurrence.allDay ? addDaysToDateKey(occurrence.end, 1) : occurrence.end,
-        allDay: occurrence.allDay,
-        backgroundColor: occurrence.categoryColor ?? occurrence.calendarColor,
-        borderColor: occurrence.categoryColor ?? occurrence.calendarColor,
-        textColor: '#ffffff',
-        extendedProps: { occurrence }
-      })),
-    [events]
-  );
-
-  const calendarEvents = useMemo(() => {
-    const map = new Map<string, EventInput[]>();
-    for (const item of fcEvents) {
-      const occurrence = item.extendedProps?.occurrence as Occurrence;
-      const list = map.get(occurrence.calendarId) ?? [];
-      list.push(item);
-      map.set(occurrence.calendarId, list);
-    }
-    return map;
-  }, [fcEvents]);
 
   function toggleCalendar(id: string) {
     setSelected((current) =>
@@ -225,7 +185,7 @@ export function CalendarPage() {
       timeZone,
       dateFormat: settings?.dateFormat ?? 'dd/MM/yyyy',
       timeFormat: settings?.timeFormat ?? '24'
-    })} â€“ ${formatDate(end.toISOString(), {
+    })} – ${formatDate(end.toISOString(), {
       locale,
       timeZone,
       dateFormat: settings?.dateFormat ?? 'dd/MM/yyyy',
@@ -274,62 +234,44 @@ export function CalendarPage() {
     });
   }
 
-  async function handleDrop(changeInfo: any) {
-    const occurrence = changeInfo.event.extendedProps?.occurrence as Occurrence | undefined;
-    if (!occurrence) return;
-    const start = changeInfo.event.start;
-    const end = changeInfo.event.end ?? new Date((start?.getTime() ?? Date.now()) + 3600000);
-    if (!start) return;
-    const body: Record<string, unknown> = {
-      start: occurrence.allDay ? changeInfo.event.startStr.slice(0, 10) : start.toISOString(),
-      end: occurrence.allDay
-        ? addDaysToDateKey(changeInfo.event.endStr.slice(0, 10), -1)
-        : end.toISOString()
-    };
+  async function handleMove(
+    occurrence: Occurrence,
+    start: string,
+    end: string,
+    targetCalendarId?: string
+  ) {
+    const body: Record<string, unknown> = { start, end };
+    if (targetCalendarId && targetCalendarId !== occurrence.calendarId) {
+      body.calendarId = targetCalendarId;
+    }
     if (occurrence.recurring) {
       const occurrenceOnly = window.confirm(t('calendar.editOccurrenceQuestion'));
       body.scope = occurrenceOnly ? 'occurrence' : 'series';
-      if (occurrenceOnly) body.occurrenceStart = occurrence.occurrenceStart;
+      if (occurrenceOnly) {
+        body.occurrenceStart = occurrence.occurrenceStart;
+        delete body.calendarId;
+      }
     }
     try {
       await apiPatch(`/events/${occurrence.eventId}`, body);
       showFlash(t('calendar.eventUpdated'));
       await loadEvents();
     } catch (err) {
-      changeInfo.revert();
       showFlash(err instanceof ApiError ? errorMessage(err.code) : t('calendar.moveError'));
     }
   }
 
-  if (!settings) return null;
-
-  const calendarProps = {
-    plugins: [timeGridPlugin, dayGridPlugin, interactionPlugin],
-    headerToolbar: false as const,
-    locale: locales[language],
-    firstDay,
-    timeZone,
-    nowIndicator: true,
-    slotDuration: '00:30:00',
-    scrollTime: `${settings.workHours.start}:00`,
-    businessHours: {
-      daysOfWeek: [0, 1, 2, 3, 4, 5, 6].filter((day) => !settings.weekendDays.includes(day)),
-      startTime: settings.workHours.start,
-      endTime: settings.workHours.end
-    },
-    eventTimeFormat: {
-      hour: '2-digit' as const,
-      minute: '2-digit' as const,
-      hour12: settings.timeFormat === '12'
-    },
-    height: 'auto' as const,
-    eventDrop: (info: any) => void handleDrop(info),
-    eventResize: (info: any) => void handleDrop(info),
-    eventClick: (info: any) => {
-      const occurrence = info.event.extendedProps?.occurrence as Occurrence | undefined;
-      if (occurrence) openEdit(occurrence);
+  async function applyBrowserTimeZone() {
+    try {
+      await apiPut('/auth/me/preferences', { timezone: browserTimeZone });
+      await refresh();
+      showFlash(t('prefs.profileSaved'));
+    } catch {
+      showFlash(t('common.error'));
     }
-  };
+  }
+
+  if (!settings) return null;
 
   return (
     <div className="calendar-page">
@@ -405,6 +347,24 @@ export function CalendarPage() {
       </aside>
 
       <section className="calendar-main">
+        {timeZone !== browserTimeZone && !timezoneNoticeDismissed && (
+          <div className="alert info timezone-alert">
+            <span>
+              {t('calendar.timezoneMismatch')} ({timeZone} / {browserTimeZone})
+            </span>
+            <button type="button" className="button small" onClick={() => void applyBrowserTimeZone()}>
+              {t('prefs.useBrowserTimeZone')}
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              onClick={() => setTimezoneNoticeDismissed(true)}
+              aria-label={t('common.close')}
+            >
+              ×
+            </button>
+          </div>
+        )}
         <div className="calendar-toolbar">
           <div className="view-switch">
             {(['day', 'week', 'month'] as ViewKind[]).map((kind) => (
@@ -420,16 +380,19 @@ export function CalendarPage() {
           </div>
           <div className="period-nav">
             <button type="button" className="button small" onClick={() => shiftDate(-1)}>
-              â€¹
+              ‹
             </button>
             <button type="button" className="button small" onClick={() => setDate(new Date())}>
               {t('common.today')}
             </button>
             <button type="button" className="button small" onClick={() => shiftDate(1)}>
-              â€º
+              ›
             </button>
           </div>
           <h2 className="period-label">{periodLabel()}</h2>
+          <span className="timezone-badge" title={t('event.timezoneHint')}>
+            {timeZone}
+          </span>
           <div className="spacer" />
           <button
             type="button"
@@ -448,88 +411,23 @@ export function CalendarPage() {
 
         {flash && <div className="alert info">{flash}</div>}
         {error && <div className="alert error">{error}</div>}
-        {view === 'month' && <p className="hint month-note">{t('calendar.monthNote')}</p>}
 
         {selected.length === 0 ? (
           <div className="empty-state">{t('calendar.emptySelection')}</div>
-        ) : view === 'month' ? (
-          <div className="calendar-single">
-            <CalendarInstance
-              {...calendarProps}
-              viewKind="month"
-              date={date}
-              weekNumbers
-              dayMaxEvents={4}
-              events={fcEvents}
-              selectable
-              select={(info: any) => {
-                if (!writableCalendar) return;
-                openCreate(
-                  writableCalendar.id,
-                  info.start,
-                  info.end,
-                  info.allDay,
-                  info.startStr,
-                  addDaysToDateKey(info.endStr.slice(0, 10), -1)
-                );
-              }}
-              dateClick={(info: any) => {
-                if (!writableCalendar) return;
-                const start = new Date(info.date);
-                openCreate(
-                  writableCalendar.id,
-                  start,
-                  new Date(start.getTime() + 3600000),
-                  info.allDay,
-                  info.dateStr,
-                  info.dateStr
-                );
-              }}
-            />
-          </div>
         ) : (
-          <div className="resource-columns">
-            {selectedCalendars.map((calendar) => (
-              <div key={calendar.id} className="resource-column">
-                <div className="resource-column-header">
-                  <span className="color-dot" style={{ background: calendar.color }} />
-                  <strong>{calendar.ownerName}</strong>
-                  {calendar.isOwner && <span className="badge">{t('calendar.owner')}</span>}
-                </div>
-                <CalendarInstance
-                  {...calendarProps}
-                  viewKind={view}
-                  date={date}
-                  weekNumbers={view === 'week'}
-                  events={calendarEvents.get(calendar.id) ?? []}
-                  selectable={calendar.canCreate}
-                  select={(info: any) => {
-                    if (!calendar.canCreate) return;
-                    openCreate(
-                      calendar.id,
-                      info.start,
-                      info.end,
-                      info.allDay,
-                      info.startStr,
-                      info.allDay ? addDaysToDateKey(info.endStr.slice(0, 10), -1) : undefined
-                    );
-                  }}
-                  dateClick={(info: any) => {
-                    if (!calendar.canCreate) return;
-                    const start = new Date(info.date);
-                    openCreate(
-                      calendar.id,
-                      start,
-                      new Date(start.getTime() + 3600000),
-                      info.allDay,
-                      info.dateStr,
-                      info.dateStr
-                    );
-                  }}
-                />
-              </div>
-            ))}
-          </div>
+          <PlanningGrid
+            view={view}
+            date={date}
+            calendars={selectedCalendars}
+            events={events}
+            settings={settings}
+            timeZone={timeZone}
+            onCreate={(calendarId, start, end, allDay) => openCreate(calendarId, start, end, allDay)}
+            onEdit={openEdit}
+            onMove={(occurrence, start, end, targetCalendarId) =>
+              void handleMove(occurrence, start, end, targetCalendarId)
+            }
+          />
         )}
 
         {events.length === 0 && !loading && selected.length > 0 && (
