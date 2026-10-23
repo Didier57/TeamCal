@@ -1,6 +1,6 @@
 services:
   teamcal:
-    image: ghcr.io/didier57/teamcal:${TEAMCAL_VERSION:-latest}
+    image: ghcr.io/didier57/teamcal-app:${TEAMCAL_VERSION:-latest}
     container_name: teamcal
     restart: unless-stopped
     ports:

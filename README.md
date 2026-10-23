@@ -48,7 +48,7 @@ Application web de gestion de planning d'équipe : calendriers multi-utilisateur
 L'image est publiée sur GitHub Container Registry :
 
 ```bash
-docker pull ghcr.io/didier57/teamcal:latest
+docker pull ghcr.io/didier57/teamcal-app:latest
 ```
 
 Créez un fichier `compose.yaml` (ou utilisez celui du dépôt) puis :
@@ -62,7 +62,7 @@ L'application est disponible sur `http://localhost:8080` (port modifiable avec `
 ```yaml
 services:
   teamcal:
-    image: ghcr.io/didier57/teamcal:latest
+    image: ghcr.io/didier57/teamcal-app:latest
     container_name: teamcal
     restart: unless-stopped
     ports:
