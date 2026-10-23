@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { apiGet, apiPost, apiPut, ApiError } from '../../api';
+import { apiGet, apiPut, ApiError } from '../../api';
 import { useAuth } from '../../app-context';
 import { languageLabel, useI18n } from '../../i18n';
-import { countryLabel, EUROPEAN_COUNTRY_CODES } from '../../countries';
-import type { AdminSettings, HolidaySource, HolidaySyncResult, Language, ViewKind } from '../../types';
+import type { AdminSettings, Language, ViewKind } from '../../types';
 
 const timezones = [
   'Europe/Paris',
@@ -20,13 +19,6 @@ const timezones = [
 
 const weekdays = [1, 2, 3, 4, 5, 6, 0];
 
-function newHolidaySourceId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `holiday-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
 export function SettingsAdmin() {
   const { t, locale, errorMessage } = useI18n();
   const { refresh } = useAuth();
@@ -36,8 +28,6 @@ export function SettingsAdmin() {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [syncFlash, setSyncFlash] = useState<string | null>(null);
-  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     apiGet<AdminSettings>('/settings')
@@ -82,7 +72,6 @@ export function SettingsAdmin() {
           .split(',')
           .map((value) => value.trim())
           .filter(Boolean),
-        holidaySources: settings.holidaySources,
         sessionDurationDays: settings.sessionDurationDays
       };
       const updated = await apiPut<AdminSettings>('/settings', body);
@@ -93,47 +82,6 @@ export function SettingsAdmin() {
       setError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
     } finally {
       setBusy(false);
-    }
-  }
-
-  function addHolidaySource() {
-    if (!settings) return;
-    update('holidaySources', [
-      ...(settings.holidaySources ?? []),
-      { id: newHolidaySourceId(), country: 'LU', url: '', name: '' }
-    ]);
-  }
-
-  function updateHolidaySource(id: string, patch: Partial<HolidaySource>) {
-    if (!settings) return;
-    update(
-      'holidaySources',
-      settings.holidaySources.map((source) => (source.id === id ? { ...source, ...patch } : source))
-    );
-  }
-
-  function removeHolidaySource(id: string) {
-    if (!settings) return;
-    update(
-      'holidaySources',
-      settings.holidaySources.filter((source) => source.id !== id)
-    );
-  }
-
-  async function syncHolidays() {
-    setSyncing(true);
-    setSyncFlash(null);
-    setError(null);
-    try {
-      const result = await apiPost<HolidaySyncResult>('/holidays/sync');
-      setSyncFlash(
-        `${t('admin.holidaysSynced')} ${result.users} ${t('admin.holidaysUsers')}, ${result.created + result.updated} ${t('admin.holidaysEvents')}`
-      );
-      if (result.errors.length) setError(result.errors.join(' | '));
-    } catch (err) {
-      setError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
-    } finally {
-      setSyncing(false);
     }
   }
 
@@ -273,59 +221,6 @@ export function SettingsAdmin() {
               ))}
             </div>
           </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <h3>{t('admin.holidaysTitle')}</h3>
-        <p className="muted">{t('admin.holidaysHelp')}</p>
-        {syncFlash && <div className="alert info">{syncFlash}</div>}
-        <div className="holiday-source-list">
-          {settings.holidaySources.map((source) => (
-            <div className="holiday-source-row" key={source.id}>
-              <select
-                value={source.country}
-                onChange={(event) => updateHolidaySource(source.id, { country: event.target.value })}
-                aria-label={t('admin.holidayCountry')}
-              >
-                {EUROPEAN_COUNTRY_CODES.map((code) => (
-                  <option key={code} value={code}>
-                    {countryLabel(code, locale)}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={source.url}
-                placeholder={t('admin.holidayUrl')}
-                onChange={(event) => updateHolidaySource(source.id, { url: event.target.value })}
-              />
-              <input
-                value={source.name}
-                placeholder={t('admin.holidayName')}
-                onChange={(event) => updateHolidaySource(source.id, { name: event.target.value })}
-              />
-              <button
-                type="button"
-                className="button small danger"
-                onClick={() => removeHolidaySource(source.id)}
-              >
-                {t('common.remove')}
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="row-actions">
-          <button type="button" className="button" onClick={addHolidaySource}>
-            + {t('admin.addHolidaySource')}
-          </button>
-          <button
-            type="button"
-            className="button"
-            onClick={() => void syncHolidays()}
-            disabled={syncing || busy}
-          >
-            {t('admin.syncHolidays')}
-          </button>
         </div>
       </div>
 

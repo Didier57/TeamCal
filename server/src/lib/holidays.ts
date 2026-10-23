@@ -22,6 +22,15 @@ interface HolidayEntry extends HolidayOccurrence {
   key: string;
 }
 
+interface HolidayAdjustmentRow {
+  holiday_key: string;
+  country: string;
+  holiday_date: string;
+  title: string | null;
+  hidden: number;
+  manual: number;
+}
+
 let queue: Promise<HolidaySyncResult> = Promise.resolve({
   sources: 0,
   users: 0,
@@ -148,7 +157,7 @@ export function parseHolidayIcs(
   return Array.from(result.values()).sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title));
 }
 
-function holidayKey(country: string, entry: HolidayOccurrence): string {
+export function holidayKey(country: string, entry: HolidayOccurrence): string {
   const slug = entry.title
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -157,6 +166,61 @@ function holidayKey(country: string, entry: HolidayOccurrence): string {
     .replace(/^-+|-+$/g, '')
     .slice(0, 48);
   return `${country}:${entry.date}:${slug || 'holiday'}`;
+}
+
+export function applyHolidayToCountryUsers(
+  db: DB,
+  country: string,
+  key: string,
+  date: string,
+  title: string
+): number {
+  const users = db
+    .prepare(
+      `SELECT u.id, u.country, c.id AS calendar_id
+       FROM users u JOIN calendars c ON c.owner_id = u.id
+       WHERE u.is_active = 1 AND u.country = ?`
+    )
+    .all(country) as { id: string; country: string; calendar_id: string }[];
+  const findEvent = db.prepare('SELECT id FROM events WHERE calendar_id = ? AND holiday_key = ?');
+  const updateEvent = db.prepare(
+    `UPDATE events SET title = ?, start_at = ?, end_at = ?, holiday_source_id = ?, status = 'confirmed',
+       updated_at = ? WHERE id = ?`
+  );
+  const insertEvent = db.prepare(
+    `INSERT INTO events (id, uid, calendar_id, owner_id, created_by, title, description, start_at, end_at,
+       all_day, timezone, location, url, priority, visibility, category_id, rrule, recurrence_until,
+       sequence, status, holiday_source_id, holiday_key, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 1, 'UTC', NULL, NULL, NULL, 'default', NULL, NULL, NULL,
+       0, 'confirmed', ?, ?, ?, ?)`
+  );
+  let count = 0;
+  db.transaction(() => {
+    for (const user of users) {
+      const now = nowIso();
+      const existing = findEvent.get(user.calendar_id, key) as { id: string } | undefined;
+      if (existing) {
+        updateEvent.run(title, date, date, country, now, existing.id);
+      } else {
+        insertEvent.run(
+          newId(),
+          `holiday:${user.calendar_id}:${key}`,
+          user.calendar_id,
+          user.id,
+          user.id,
+          title,
+          date,
+          date,
+          country,
+          key,
+          now,
+          now
+        );
+      }
+      count += 1;
+    }
+  })();
+  return count;
 }
 
 async function fetchIcs(url: string): Promise<string> {
@@ -198,6 +262,12 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
   result.sources = settings.holidaySources.length;
   const holidaysByCountry = new Map<string, Map<string, HolidayEntry>>();
   const failedCountries = new Set<string>();
+  const adjustments = new Map(
+    (db.prepare('SELECT * FROM holiday_adjustments').all() as HolidayAdjustmentRow[]).map((row) => [
+      row.holiday_key,
+      row
+    ])
+  );
 
   for (const [country, sources] of grouped) {
     const entries = new Map<string, HolidayEntry>();
@@ -217,7 +287,29 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
       }
     }
     if (failed) failedCountries.add(country);
-    else holidaysByCountry.set(country, entries);
+    else {
+      for (const [key, entry] of entries) {
+        const adjustment = adjustments.get(key);
+        if (adjustment?.hidden) entries.delete(key);
+        else if (adjustment?.title) entry.title = adjustment.title;
+      }
+      holidaysByCountry.set(country, entries);
+    }
+  }
+
+  for (const adjustment of adjustments.values()) {
+    if (!adjustment.manual || adjustment.hidden || !adjustment.title || failedCountries.has(adjustment.country)) {
+      continue;
+    }
+    const entries = holidaysByCountry.get(adjustment.country) ?? new Map<string, HolidayEntry>();
+    if (!entries.has(adjustment.holiday_key)) {
+      entries.set(adjustment.holiday_key, {
+        key: adjustment.holiday_key,
+        date: adjustment.holiday_date,
+        title: adjustment.title
+      });
+    }
+    holidaysByCountry.set(adjustment.country, entries);
   }
 
   const users = (

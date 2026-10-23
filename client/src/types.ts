@@ -88,6 +88,15 @@ export interface HolidaySyncResult {
   errors: string[];
 }
 
+export interface AdminHoliday {
+  key: string;
+  country: string;
+  date: string;
+  title: string;
+  users: number;
+  manual: boolean;
+}
+
 export interface AdminSettings extends PublicSettings {
   holidaySources: HolidaySource[];
   smtp: {

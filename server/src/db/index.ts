@@ -173,6 +173,22 @@ ALTER TABLE events ADD COLUMN holiday_source_id TEXT;
 ALTER TABLE events ADD COLUMN holiday_key TEXT;
 CREATE UNIQUE INDEX idx_events_holiday_key ON events(calendar_id, holiday_key) WHERE holiday_key IS NOT NULL;
 `
+  },
+  {
+    id: 5,
+    sql: `
+CREATE TABLE holiday_adjustments (
+  holiday_key TEXT PRIMARY KEY,
+  country TEXT NOT NULL,
+  holiday_date TEXT NOT NULL,
+  title TEXT,
+  hidden INTEGER NOT NULL DEFAULT 0,
+  manual INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX idx_holiday_adjustments_country ON holiday_adjustments(country);
+`
   }
 ];
 

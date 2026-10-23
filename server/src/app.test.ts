@@ -235,6 +235,56 @@ describe('TeamCal API', () => {
     expect(afterCancel.body).toHaveLength(3);
   });
 
+  it('manages manual holidays and keeps adjustments across syncs', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const pref = await agent
+      .put('/api/auth/me/preferences')
+      .set('X-CSRF-Token', csrf)
+      .send({ country: 'FR' });
+    expect(pref.status).toBe(200);
+
+    const created = await agent
+      .post('/api/holidays/admin')
+      .set('X-CSRF-Token', csrf)
+      .send({ country: 'FR', date: '2026-08-15', title: 'Fête locale' });
+    expect(created.status).toBe(201);
+    expect(created.body.users).toBe(1);
+    const key = created.body.key as string;
+
+    const list = await agent.get('/api/holidays/admin');
+    expect(list.status).toBe(200);
+    expect(list.body).toHaveLength(1);
+    expect(list.body[0].title).toBe('Fête locale');
+    expect(list.body[0].manual).toBe(true);
+
+    const patched = await agent
+      .patch(`/api/holidays/admin/${encodeURIComponent(key)}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ title: 'Fête nationale' });
+    expect(patched.status).toBe(200);
+
+    const events = await agent.get('/api/events?start=2026-08-01T00:00:00.000Z&end=2026-09-01T00:00:00.000Z');
+    expect(events.body).toHaveLength(1);
+    expect(events.body[0].title).toBe('Fête nationale');
+
+    const synced = await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
+    expect(synced.status).toBe(200);
+    const afterSync = await agent.get('/api/holidays/admin');
+    expect(afterSync.body).toHaveLength(1);
+    expect(afterSync.body[0].title).toBe('Fête nationale');
+
+    const deleted = await agent
+      .delete(`/api/holidays/admin/${encodeURIComponent(key)}`)
+      .set('X-CSRF-Token', csrf);
+    expect(deleted.status).toBe(200);
+    const afterDelete = await agent.get('/api/holidays/admin');
+    expect(afterDelete.body).toHaveLength(0);
+
+    await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
+    const afterDeleteSync = await agent.get('/api/holidays/admin');
+    expect(afterDeleteSync.body).toHaveLength(0);
+  });
+
   it('prevents non-admins from reading administration settings', async () => {
     const { agent, csrf } = await setupAdmin(app);
     await agent
