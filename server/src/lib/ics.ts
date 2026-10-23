@@ -1,6 +1,8 @@
 export interface IcsAttendee {
   name: string;
   email: string;
+  role?: 'CHAIR' | 'REQ-PARTICIPANT';
+  partStat?: string;
 }
 
 export interface IcsInput {
@@ -105,7 +107,7 @@ export function buildIcs(input: IcsInput): string {
   }
   for (const attendee of input.attendees) {
     lines.push(
-      `ATTENDEE;CUTYPE=INDIVIDUAL;CN=${quoteParam(attendee.name)};ROLE=REQ-PARTICIPANT;RSVP=TRUE;PARTSTAT=NEEDS-ACTION:mailto:${attendee.email}`
+      `ATTENDEE;CUTYPE=INDIVIDUAL;CN=${quoteParam(attendee.name)};ROLE=${attendee.role ?? 'REQ-PARTICIPANT'};RSVP=TRUE;PARTSTAT=${attendee.partStat ?? 'NEEDS-ACTION'}:mailto:${attendee.email}`
     );
   }
   lines.push(`STATUS:${input.cancelled ? 'CANCELLED' : 'CONFIRMED'}`);

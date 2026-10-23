@@ -5,7 +5,7 @@ import type { EventRow } from './permissions';
 import { emailTexts } from './i18n';
 import { buildIcs, googleCalendarUrl } from './ics';
 import { logger } from './logger';
-import { newId, nowIso } from './util';
+import { newId, nowIso, randomToken } from './util';
 
 export type MailAction = 'created' | 'updated' | 'cancelled';
 
@@ -15,6 +15,7 @@ interface Recipient {
   name: string;
   language: string;
   timezone: string | null;
+  feedToken: string;
 }
 
 function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipient[] {
@@ -27,7 +28,7 @@ function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipi
   const placeholders = ids.map(() => '?').join(',');
   const rows = db
     .prepare(
-      `SELECT u.id, u.email, u.language, u.timezone, u.first_name, u.last_name
+      `SELECT u.id, u.email, u.language, u.timezone, u.first_name, u.last_name, u.feed_token
        FROM users u
        WHERE u.id IN (${placeholders})`
     )
@@ -38,6 +39,7 @@ function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipi
     timezone: string | null;
     first_name: string;
     last_name: string;
+    feed_token: string | null;
   }[];
   const seen = new Set<string>();
   return rows
@@ -46,13 +48,25 @@ function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipi
       seen.add(r.email.toLowerCase());
       return true;
     })
-    .map((r) => ({
-      id: r.id,
-      email: r.email,
-      language: r.language,
-      timezone: r.timezone,
-      name: `${r.first_name} ${r.last_name}`.trim() || r.email
-    }));
+    .map((r) => {
+      let feedToken = r.feed_token;
+      if (!feedToken) {
+        feedToken = randomToken(24);
+        db.prepare('UPDATE users SET feed_token = ?, updated_at = ? WHERE id = ?').run(
+          feedToken,
+          nowIso(),
+          r.id
+        );
+      }
+      return {
+        id: r.id,
+        email: r.email,
+        language: r.language,
+        timezone: r.timezone,
+        name: `${r.first_name} ${r.last_name}`.trim() || r.email,
+        feedToken
+      };
+    });
 }
 
 export function smtpConfigured(settings: AppSettings): boolean {
@@ -128,6 +142,10 @@ export async function notifyEvent(
     name: organizerRow ? `${organizerRow.first_name} ${organizerRow.last_name}`.trim() : settings.appName,
     email: organizerRow?.email ?? settings.smtp.fromEmail
   };
+  const icsOrganizer = {
+    name: settings.smtp.fromName || settings.appName,
+    email: settings.smtp.fromEmail
+  };
   const mailer = transport(settings);
   for (const recipient of recipients) {
     const texts = emailTexts(recipient.language);
@@ -141,11 +159,13 @@ export async function notifyEvent(
     const when = event.all_day
       ? formatDate(event.start_at, true, displayTimeZone, recipient.language)
       : `${formatDate(event.start_at, false, displayTimeZone, recipient.language)} - ${formatDate(event.end_at, false, displayTimeZone, recipient.language)}`;
-    const attendees = recipients
-      .filter((r) => r.email.toLowerCase() !== organizer.email.toLowerCase())
-      .map((r) => ({ name: r.name, email: r.email }));
-    const method: 'REQUEST' | 'CANCEL' | 'PUBLISH' =
-      action === 'cancelled' ? 'CANCEL' : attendees.length > 0 ? 'REQUEST' : 'PUBLISH';
+    const attendees = recipients.map((r) => ({
+      name: r.name,
+      email: r.email,
+      role: r.id === event.owner_id ? ('CHAIR' as const) : ('REQ-PARTICIPANT' as const),
+      partStat: r.id === event.owner_id ? 'ACCEPTED' : 'NEEDS-ACTION'
+    }));
+    const method: 'REQUEST' | 'CANCEL' = action === 'cancelled' ? 'CANCEL' : 'REQUEST';
     const ics = buildIcs({
       uid: event.uid,
       sequence: event.sequence,
@@ -158,7 +178,7 @@ export async function notifyEvent(
       end: event.end_at,
       allDay: Boolean(event.all_day),
       rrule: event.rrule,
-      organizer,
+      organizer: icsOrganizer,
       attendees,
       cancelled: action === 'cancelled'
     });
@@ -173,6 +193,11 @@ export async function notifyEvent(
     const prefsUrl = settings.baseUrl
       ? `${settings.baseUrl.replace(/\/+$/, '')}/preferences`
       : '';
+    const feedBase = settings.baseUrl ? settings.baseUrl.replace(/\/+$/, '') : '';
+    const feedUrl = feedBase ? `${feedBase}/api/feed/${recipient.feedToken}.ics` : '';
+    const googleFeedUrl = feedUrl
+      ? `https://calendar.google.com/calendar/r/settings/addbyurl?url=${encodeURIComponent(feedUrl)}`
+      : '';
     const html = `<!doctype html><html><body style="font-family:Segoe UI,Arial,sans-serif;color:#1c2434">
       <h2 style="margin:0 0 8px">${escapeHtml(event.title)}</h2>
       <p>${escapeHtml(texts.intro(action))}</p>
@@ -181,7 +206,8 @@ export async function notifyEvent(
       ${event.description ? `<p><strong>${escapeHtml(texts.details)} :</strong><br>${escapeHtml(event.description).replace(/\n/g, '<br>')}</p>` : ''}
       <p><strong>${escapeHtml(texts.organizer)} :</strong> ${escapeHtml(organizer.name)}</p>
       <p><a href="${escapeHtml(gcal)}">Google Calendar</a></p>
-      ${prefsUrl ? `<p>${escapeHtml(texts.subscribe)}<br><a href="${escapeHtml(prefsUrl)}">${escapeHtml(texts.subscribeAction)}</a></p>` : ''}
+      ${feedUrl ? `<p><strong>${escapeHtml(texts.subscribe)}</strong><br><a href="${escapeHtml(googleFeedUrl)}">${escapeHtml(texts.autoAddAction)}</a><br><span style="color:#64748b;font-size:12px">${escapeHtml(texts.autoAddHint)}</span></p>` : ''}
+      ${prefsUrl ? `<p><a href="${escapeHtml(prefsUrl)}">${escapeHtml(texts.subscribeAction)}</a></p>` : ''}
       <p style="color:#64748b;font-size:12px">${escapeHtml(texts.addToCalendar)}<br>${escapeHtml(texts.footer)}</p>
     </body></html>`;
     try {
@@ -192,9 +218,8 @@ export async function notifyEvent(
         subject,
         html,
         text: `${event.title}\n${texts.intro(action)}\n${texts.when}: ${when}`,
-        attachments: [
+        alternatives: [
           {
-            filename: 'invitation.ics',
             content: ics,
             contentType: `text/calendar; charset=utf-8; method=${method}`
           }
