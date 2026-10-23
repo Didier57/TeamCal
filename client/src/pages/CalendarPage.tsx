@@ -65,11 +65,22 @@ export function CalendarPage() {
   const [timezoneNoticeDismissed, setTimezoneNoticeDismissed] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [viewsOpen, setViewsOpen] = useState(false);
+  const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
+  const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const flashTimer = useRef<number | null>(null);
+  const viewsMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!viewsMenuOpen) return;
+    const handler = (event: MouseEvent) => {
+      if (!viewsMenuRef.current?.contains(event.target as Node)) setViewsMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [viewsMenuOpen]);
 
   const firstDay = settings?.firstDay ?? 1;
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const storageKey = `teamcal_selected_${user?.id ?? 'anon'}`;
 
   const showFlash = useCallback((message: string) => {
     setFlash(message);
@@ -88,37 +99,14 @@ export function CalendarPage() {
     setCategories(categoryList);
     setUsers(userList);
     setViews(viewList);
-    setSelected((current) => {
-      if (current.length > 0) {
-        const available = new Set(calendarList.filter((c) => c.canView).map((c) => c.id));
-        const kept = current.filter((id) => available.has(id));
-        if (kept.length > 0) return kept;
-      }
-      try {
-        const stored = JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[];
-        const available = new Set(calendarList.filter((c) => c.canView).map((c) => c.id));
-        const kept = stored.filter((id) => available.has(id));
-        if (kept.length > 0) return kept;
-      } catch {
-        // ignore
-      }
-      return calendarList.filter((c) => c.canView).map((c) => c.id);
-    });
-  }, [storageKey]);
+    setSelected(calendarList.filter((calendar) => calendar.canView).map((calendar) => calendar.id));
+  }, []);
 
   useEffect(() => {
     loadReferenceData()
       .catch(() => setError(t('common.error')))
       .finally(() => setLoading(false));
   }, [loadReferenceData, t]);
-
-  useEffect(() => {
-    if (selected.length === 0) {
-      localStorage.removeItem(storageKey);
-      return;
-    }
-    localStorage.setItem(storageKey, JSON.stringify(selected));
-  }, [selected, storageKey]);
 
   const loadEvents = useCallback(async () => {
     if (selected.length === 0) {
@@ -153,10 +141,24 @@ export function CalendarPage() {
     [selectedCalendars, calendars]
   );
 
-  function toggleCalendar(id: string) {
-    setSelected((current) =>
-      current.includes(id) ? current.filter((value) => value !== id) : [...current, id]
-    );
+  const allViewableCalendars = useMemo(
+    () => calendars.filter((calendar) => calendar.canView).map((calendar) => calendar.id),
+    [calendars]
+  );
+
+  function applyView(customView: CustomView) {
+    const ids = calendars
+      .filter((calendar) => customView.userIds.includes(calendar.ownerId) && calendar.canView)
+      .map((calendar) => calendar.id);
+    setSelected(ids);
+    setActiveViewId(customView.id);
+    setViewsMenuOpen(false);
+  }
+
+  function showAllResources() {
+    setSelected(allViewableCalendars);
+    setActiveViewId(null);
+    setViewsMenuOpen(false);
   }
 
   function shiftDate(direction: number) {
@@ -275,77 +277,6 @@ export function CalendarPage() {
 
   return (
     <div className="calendar-page">
-      <aside className="calendar-sidebar">
-        <div className="sidebar-section">
-          <div className="sidebar-heading">
-            <h3>{t('calendar.resources')}</h3>
-            <div className="mini-actions">
-              <button type="button" className="link" onClick={() => setSelected(calendars.filter((c) => c.canView).map((c) => c.id))}>
-                {t('calendar.showAll')}
-              </button>
-              <button type="button" className="link" onClick={() => setSelected([])}>
-                {t('calendar.hideAll')}
-              </button>
-            </div>
-          </div>
-          <div className="resource-list">
-            {calendars.length === 0 && <p className="muted">{t('calendar.noResources')}</p>}
-            {calendars.map((calendar) => (
-              <label key={calendar.id} className="resource-row">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(calendar.id)}
-                  onChange={() => toggleCalendar(calendar.id)}
-                />
-                <span className="color-dot" style={{ background: calendar.color }} />
-                <span className="resource-name">{calendar.ownerName}</span>
-                {calendar.isOwner && <span className="badge">{t('calendar.owner')}</span>}
-              </label>
-            ))}
-          </div>
-        </div>
-        <div className="sidebar-section">
-          <div className="sidebar-heading">
-            <h3>{t('calendar.views')}</h3>
-            <button type="button" className="link" onClick={() => setViewsOpen(true)}>
-              {t('calendar.manageViews')}
-            </button>
-          </div>
-          <div className="view-list">
-            {views.length === 0 && <p className="muted">{t('views.empty')}</p>}
-            {views.map((customView) => (
-              <button
-                key={customView.id}
-                type="button"
-                className="view-row"
-                onClick={() => {
-                  const ids = calendars
-                    .filter((calendar) => customView.userIds.includes(calendar.ownerId) && calendar.canView)
-                    .map((calendar) => calendar.id);
-                  setSelected(ids);
-                }}
-              >
-                <span>{customView.name}</span>
-                <small>{customView.isShared ? t('views.global') : t('views.personal')}</small>
-              </button>
-            ))}
-          </div>
-        </div>
-        {categories.length > 0 && (
-          <div className="sidebar-section">
-            <h3>{t('calendar.legend')}</h3>
-            <div className="legend">
-              {categories.map((category) => (
-                <span key={category.id} className="legend-item">
-                  <span className="color-dot" style={{ background: category.color }} />
-                  {category.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-      </aside>
-
       <section className="calendar-main">
         {timeZone !== browserTimeZone && !timezoneNoticeDismissed && (
           <div className="alert info timezone-alert">
@@ -393,6 +324,49 @@ export function CalendarPage() {
           <span className="timezone-badge" title={t('event.timezoneHint')}>
             {timeZone}
           </span>
+          <div className="toolbar-menu" ref={viewsMenuRef}>
+            <button
+              type="button"
+              className="button small"
+              onClick={() => setViewsMenuOpen((current) => !current)}
+            >
+              {t('nav.views')} ▾
+            </button>
+            {viewsMenuOpen && (
+              <div className="menu-popover">
+                <button
+                  type="button"
+                  className={`menu-item ${activeViewId === null ? 'active' : ''}`}
+                  onClick={showAllResources}
+                >
+                  {t('calendar.allResources')}
+                </button>
+                {views.length > 0 && <div className="menu-divider" />}
+                {views.map((customView) => (
+                  <button
+                    key={customView.id}
+                    type="button"
+                    className={`menu-item ${activeViewId === customView.id ? 'active' : ''}`}
+                    onClick={() => applyView(customView)}
+                  >
+                    <span>{customView.name}</span>
+                    <small>{customView.isShared ? t('views.global') : t('views.personal')}</small>
+                  </button>
+                ))}
+                <div className="menu-divider" />
+                <button
+                  type="button"
+                  className="menu-item"
+                  onClick={() => {
+                    setViewsMenuOpen(false);
+                    setViewsOpen(true);
+                  }}
+                >
+                  {t('calendar.manageViews')}
+                </button>
+              </div>
+            )}
+          </div>
           <div className="spacer" />
           <button
             type="button"

@@ -230,7 +230,7 @@ export function PlanningGrid({
   }
 
   const rowStyle = (columns: number) => ({
-    gridTemplateColumns: `170px repeat(${columns}, minmax(${view === 'month' ? 118 : 96}px, 1fr))`
+    gridTemplateColumns: `190px repeat(${columns}, minmax(${view === 'month' ? 118 : 96}px, 1fr))`
   });
 
   const headerCell = (key: string, compact = false) => {
@@ -328,7 +328,6 @@ export function PlanningGrid({
             <div className="planning-resource">
               <span className="color-dot" style={{ background: calendar.color }} />
               <span className="planning-resource-name">{calendar.ownerName}</span>
-              {calendar.isOwner && <span className="badge">{t('calendar.owner')}</span>}
             </div>
             {dayKeys.map((key) => (
               <div
