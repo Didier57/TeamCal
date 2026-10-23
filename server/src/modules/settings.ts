@@ -6,14 +6,28 @@ import { SettingsStore } from '../settings';
 import { sendTestEmail } from '../lib/mailer';
 import { isValidTimeZone } from '../lib/time';
 
+const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
 const themeColors = z.object({
-  primary: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  background: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  surface: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  text: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  muted: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  border: z.string().regex(/^#[0-9a-fA-F]{6}$/)
+  primary: color,
+  accent: color,
+  background: color,
+  surface: color,
+  text: color,
+  muted: color,
+  border: color,
+  documentTitle: color,
+  eventText: color,
+  headerBackground: color,
+  headerText: color,
+  cellBackground: color,
+  todayBackground: color,
+  eventDayBackground: color,
+  weekendBackground: color,
+  otherMonthBackground: color,
+  weekNumberColor: color,
+  eventDetailsBackground: color,
+  eventDetailsText: color
 });
 
 const settingsSchema = z.object({
@@ -41,6 +55,7 @@ const settingsSchema = z.object({
     .partial()
     .optional(),
   allowHtmlDescription: z.boolean().optional(),
+  allowUserColors: z.boolean().optional(),
   priorities: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
   visibilityOptions: z.array(z.string().trim().min(1).max(30)).max(10).optional(),
   theme: z.object({ light: themeColors, dark: themeColors }).partial().optional(),

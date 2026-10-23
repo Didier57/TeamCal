@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { apiDelete, apiPatch, apiPost, ApiError } from '../api';
-import { useAuth, useEffectiveTimeZone } from '../app-context';
+import { useEffectiveTimeZone } from '../app-context';
 import { useI18n } from '../i18n';
 import { toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
 import type {
@@ -82,7 +82,6 @@ export function EventDialog({
   onSaved
 }: Props) {
   const { t, errorMessage } = useI18n();
-  const { user } = useAuth();
   const timeZone = useEffectiveTimeZone();
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [form, setForm] = useState<EventDraft>(draft);
@@ -289,7 +288,24 @@ export function EventDialog({
                 <span>{t('event.calendar')}</span>
                 <select
                   value={form.calendarId}
-                  onChange={(event) => update('calendarId', event.target.value)}
+                  onChange={(event) => {
+                    const nextId = event.target.value;
+                    setForm((current) => {
+                      const previous = calendars.find((calendar) => calendar.id === current.calendarId);
+                      const next = calendars.find((calendar) => calendar.id === nextId);
+                      const replaceParticipant =
+                        current.participantIds.length === 0 ||
+                        (current.participantIds.length === 1 &&
+                          previous !== undefined &&
+                          current.participantIds[0] === previous.ownerId);
+                      return {
+                        ...current,
+                        calendarId: nextId,
+                        participantIds:
+                          replaceParticipant && next ? [next.ownerId] : current.participantIds
+                      };
+                    });
+                  }}
                 >
                   {availableCalendars.map((calendar) => (
                     <option key={calendar.id} value={calendar.id}>
@@ -419,7 +435,7 @@ export function EventDialog({
                   </select>
                 </label>
               )}
-              <label className="span-2">
+              <div className="span-2 rte-field">
                 <span>{t('event.description')}</span>
                 {settings.allowHtmlDescription ? (
                   <RichTextEditor
@@ -435,7 +451,7 @@ export function EventDialog({
                     placeholder={t('event.descriptionHint')}
                   />
                 )}
-              </label>
+              </div>
               {settings.fields.participants && (
                 <div className="span-2 participant-picker">
                   <span>{t('event.participants')}</span>
@@ -451,7 +467,6 @@ export function EventDialog({
                         <input
                           type="checkbox"
                           checked={form.participantIds.includes(candidate.id)}
-                          disabled={candidate.id === user?.id}
                           onChange={(event) => {
                             const ids = new Set(form.participantIds);
                             if (event.target.checked) ids.add(candidate.id);

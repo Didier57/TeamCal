@@ -1,10 +1,11 @@
-import { Router } from 'express';
+﻿import { Router } from 'express';
 import { z } from 'zod';
 import {
   checkLoginRate,
   createSession,
   csrfMiddleware,
   destroySession,
+  ensureFeedToken,
   publicUser,
   recordLoginFailure,
   recordLoginSuccess,
@@ -13,7 +14,7 @@ import {
 } from '../lib/auth';
 import { hashPassword, passwordIssues, verifyPassword } from '../lib/password';
 import { audit } from '../lib/audit';
-import { asyncHandler, HttpError, nowIso } from '../lib/util';
+import { asyncHandler, HttpError, nowIso, randomToken } from '../lib/util';
 import { SettingsStore } from '../settings';
 import { isValidTimeZone } from '../lib/time';
 
@@ -23,6 +24,35 @@ const loginSchema = z.object({
   remember: z.boolean().optional().default(false)
 });
 
+const themeColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+
+const themeColorSetSchema = z.object({
+  primary: themeColorSchema,
+  accent: themeColorSchema,
+  background: themeColorSchema,
+  surface: themeColorSchema,
+  text: themeColorSchema,
+  muted: themeColorSchema,
+  border: themeColorSchema,
+  documentTitle: themeColorSchema,
+  eventText: themeColorSchema,
+  headerBackground: themeColorSchema,
+  headerText: themeColorSchema,
+  cellBackground: themeColorSchema,
+  todayBackground: themeColorSchema,
+  eventDayBackground: themeColorSchema,
+  weekendBackground: themeColorSchema,
+  otherMonthBackground: themeColorSchema,
+  weekNumberColor: themeColorSchema,
+  eventDetailsBackground: themeColorSchema,
+  eventDetailsText: themeColorSchema
+});
+
+const themeColorsSchema = z
+  .object({ light: themeColorSetSchema, dark: themeColorSetSchema })
+  .nullable()
+  .optional();
+
 const preferencesSchema = z.object({
   firstName: z.string().trim().max(80).optional(),
   lastName: z.string().trim().max(80).optional(),
@@ -31,8 +61,12 @@ const preferencesSchema = z.object({
   timezone: z.string().max(80).nullable().optional(),
   dateFormat: z.string().max(30).nullable().optional(),
   timeFormat: z.enum(['12', '24']).nullable().optional(),
-  defaultView: z.enum(['day', 'week', 'month']).optional(),
-  theme: z.enum(['light', 'dark']).nullable().optional()
+  defaultView: z
+    .string()
+    .regex(/^(day|week|month|view:[0-9a-fA-F-]{36})$/)
+    .optional(),
+  theme: z.enum(['light', 'dark']).nullable().optional(),
+  themeColors: themeColorsSchema
 });
 
 const passwordSchema = z.object({
@@ -47,6 +81,7 @@ export function authRoutes(): Router {
     '/me',
     asyncHandler(async (req, res) => {
       const store = new SettingsStore(req.db);
+      if (req.user) ensureFeedToken(req.db, req.user);
       res.json({
         user: req.user ? publicUser(req.user) : null,
         csrfToken: req.sessionRow?.csrf_token ?? null,
@@ -81,6 +116,7 @@ export function authRoutes(): Router {
         throw new HttpError(401, 'invalid_credentials');
       }
       if (!user.is_active) throw new HttpError(403, 'account_disabled');
+      ensureFeedToken(req.db, user);
       recordLoginSuccess(ip);
       const duration = body.remember ? Math.max(30, settings.sessionDurationDays) : 1;
       const session = createSession(req, res, user.id, duration);
@@ -120,11 +156,27 @@ export function authRoutes(): Router {
     asyncHandler(async (req, res) => {
       const body = preferencesSchema.parse(req.body);
       if (body.timezone && !isValidTimeZone(body.timezone)) throw new HttpError(400, 'invalid_timezone');
+      if (body.themeColors && !new SettingsStore(req.db).get().allowUserColors) {
+        throw new HttpError(403, 'user_colors_disabled');
+      }
+      if (body.defaultView?.startsWith('view:')) {
+        const viewId = body.defaultView.slice('view:'.length);
+        const shared = req.db
+          .prepare('SELECT 1 FROM custom_views WHERE id = ? AND is_shared = 1')
+          .get(viewId);
+        if (!shared) throw new HttpError(400, 'invalid_default_view');
+      }
       const current = req.user!;
+      const themeColors =
+        body.themeColors !== undefined
+          ? body.themeColors
+            ? JSON.stringify(body.themeColors)
+            : null
+          : current.theme_colors;
       req.db
         .prepare(
           `UPDATE users SET first_name = ?, last_name = ?, email = ?, language = ?, timezone = ?,
-             date_format = ?, time_format = ?, default_view = ?, theme = ?, updated_at = ?
+             date_format = ?, time_format = ?, default_view = ?, theme = ?, theme_colors = ?, updated_at = ?
            WHERE id = ?`
         )
         .run(
@@ -137,11 +189,32 @@ export function authRoutes(): Router {
           body.timeFormat !== undefined ? body.timeFormat : current.time_format,
           body.defaultView ?? current.default_view,
           body.theme !== undefined ? body.theme : current.theme,
+          themeColors,
           nowIso(),
           current.id
         );
       const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(current.id) as UserRow;
       res.json({ user: publicUser(user) });
+    })
+  );
+
+  router.post(
+    '/me/feed/regenerate',
+    requireAuth,
+    csrfMiddleware,
+    asyncHandler(async (req, res) => {
+      const token = randomToken(24);
+      req.db
+        .prepare('UPDATE users SET feed_token = ?, updated_at = ? WHERE id = ?')
+        .run(token, nowIso(), req.user!.id);
+      audit(req.db, {
+        userId: req.user!.id,
+        action: 'auth.feed_token_regenerated',
+        entity: 'user',
+        entityId: req.user!.id,
+        ip: req.ip
+      });
+      res.json({ feedToken: token });
     })
   );
 

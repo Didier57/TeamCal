@@ -170,6 +170,9 @@ export async function notifyEvent(
       end: event.end_at,
       allDay: Boolean(event.all_day)
     });
+    const prefsUrl = settings.baseUrl
+      ? `${settings.baseUrl.replace(/\/+$/, '')}/preferences`
+      : '';
     const html = `<!doctype html><html><body style="font-family:Segoe UI,Arial,sans-serif;color:#1c2434">
       <h2 style="margin:0 0 8px">${escapeHtml(event.title)}</h2>
       <p>${escapeHtml(texts.intro(action))}</p>
@@ -178,6 +181,7 @@ export async function notifyEvent(
       ${event.description ? `<p><strong>${escapeHtml(texts.details)} :</strong><br>${escapeHtml(event.description).replace(/\n/g, '<br>')}</p>` : ''}
       <p><strong>${escapeHtml(texts.organizer)} :</strong> ${escapeHtml(organizer.name)}</p>
       <p><a href="${escapeHtml(gcal)}">Google Calendar</a></p>
+      ${prefsUrl ? `<p>${escapeHtml(texts.subscribe)}<br><a href="${escapeHtml(prefsUrl)}">${escapeHtml(texts.subscribeAction)}</a></p>` : ''}
       <p style="color:#64748b;font-size:12px">${escapeHtml(texts.addToCalendar)}<br>${escapeHtml(texts.footer)}</p>
     </body></html>`;
     try {

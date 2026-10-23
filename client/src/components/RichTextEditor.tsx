@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react';
+import { Editor } from '@tinymce/tinymce-react';
+import { useAuth } from '../app-context';
 
 interface Props {
   value: string;
@@ -8,56 +9,43 @@ interface Props {
 }
 
 export function RichTextEditor({ value, onChange, placeholder, disabled }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== value) {
-      ref.current.innerHTML = value;
-    }
-  }, []);
-
-  function command(name: string, argument?: string) {
-    document.execCommand(name, false, argument);
-    if (ref.current) onChange(ref.current.innerHTML);
-  }
+  const { theme } = useAuth();
+  const dark = theme === 'dark';
 
   return (
     <div className="rte">
-      <div className="rte-toolbar" aria-hidden={disabled}>
-        <button type="button" onClick={() => command('bold')} title="Bold">
-          <strong>B</strong>
-        </button>
-        <button type="button" onClick={() => command('italic')} title="Italic">
-          <em>I</em>
-        </button>
-        <button type="button" onClick={() => command('underline')} title="Underline">
-          <u>U</u>
-        </button>
-        <button type="button" onClick={() => command('insertUnorderedList')} title="Bullets">
-          •
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const url = window.prompt('URL');
-            if (url) command('createLink', url);
-          }}
-          title="Link"
-        >
-          ↗
-        </button>
-        <button type="button" onClick={() => command('removeFormat')} title="Clear">
-          ⌫
-        </button>
-      </div>
-      <div
-        ref={ref}
-        className="rte-content"
-        contentEditable={!disabled}
-        suppressContentEditableWarning
-        data-placeholder={placeholder}
-        onInput={(event) => onChange(event.currentTarget.innerHTML)}
-        onBlur={(event) => onChange(event.currentTarget.innerHTML)}
+      <Editor
+        licenseKey="gpl"
+        tinymceScriptSrc="/tinymce/tinymce.min.js"
+        value={value}
+        onEditorChange={(html) => onChange(html)}
+        disabled={disabled}
+        init={{
+          base_url: '/tinymce',
+          suffix: '.min',
+          skin: dark ? 'oxide-dark' : 'oxide',
+          content_css: dark
+            ? '/tinymce/skins/content/dark/content.min.css'
+            : '/tinymce/skins/content/default/content.min.css',
+          height: 240,
+          menubar: false,
+          statusbar: false,
+          branding: false,
+          promotion: false,
+          resize: false,
+          placeholder,
+          plugins: 'lists link autolink',
+          toolbar: 'bold italic underline strikethrough | bullist numlist | link | removeformat',
+          formats: {
+            underline: { inline: 'u', exact: true },
+            strikethrough: { inline: 's', exact: true }
+          },
+          convert_urls: false,
+          link_default_protocol: 'https',
+          entity_encoding: 'raw',
+          content_style:
+            "body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 14px; margin: 10px; }"
+        }}
       />
     </div>
   );

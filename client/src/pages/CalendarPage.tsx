@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { PlanningGrid } from '../components/PlanningGrid';
 import { apiGet, apiPatch, apiPut, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
@@ -56,7 +57,11 @@ export function CalendarPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [views, setViews] = useState<CustomView[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [view, setView] = useState<ViewKind>((user?.defaultView as ViewKind) || 'week');
+  const [view, setView] = useState<ViewKind>(
+    user?.defaultView === 'day' || user?.defaultView === 'week' || user?.defaultView === 'month'
+      ? user.defaultView
+      : 'week'
+  );
   const [date, setDate] = useState<Date>(new Date());
   const [events, setEvents] = useState<Occurrence[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +71,7 @@ export function CalendarPage() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [viewsOpen, setViewsOpen] = useState(false);
   const [viewsMenuOpen, setViewsMenuOpen] = useState(false);
+  const [headerSlot, setHeaderSlot] = useState<HTMLElement | null>(null);
   const [activeViewId, setActiveViewId] = useState<string | null>(null);
   const flashTimer = useRef<number | null>(null);
   const viewsMenuRef = useRef<HTMLDivElement>(null);
@@ -78,6 +84,10 @@ export function CalendarPage() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [viewsMenuOpen]);
+
+  useLayoutEffect(() => {
+    setHeaderSlot(document.getElementById('header-views-slot'));
+  }, []);
 
   const firstDay = settings?.firstDay ?? 1;
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -99,8 +109,25 @@ export function CalendarPage() {
     setCategories(categoryList);
     setUsers(userList);
     setViews(viewList);
-    setSelected(calendarList.filter((calendar) => calendar.canView).map((calendar) => calendar.id));
-  }, []);
+    const preferred = user?.defaultView;
+    const preferredView = preferred?.startsWith('view:')
+      ? viewList.find((customView) => customView.id === preferred.slice('view:'.length) && customView.isShared)
+      : undefined;
+    if (preferredView) {
+      setSelected(
+        calendarList
+          .filter(
+            (calendar) =>
+              preferredView.userIds.includes(calendar.ownerId) && calendar.canView
+          )
+          .map((calendar) => calendar.id)
+      );
+      setActiveViewId(preferredView.id);
+    } else {
+      setActiveViewId(null);
+      setSelected(calendarList.filter((calendar) => calendar.canView).map((calendar) => calendar.id));
+    }
+  }, [user?.defaultView]);
 
   useEffect(() => {
     loadReferenceData()
@@ -203,6 +230,8 @@ export function CalendarPage() {
     startKey?: string,
     endKey?: string
   ): EventDraft {
+    const targetCalendar = calendars.find((calendar) => calendar.id === calendarId);
+    const defaultParticipant = targetCalendar?.ownerId ?? user?.id;
     return {
       calendarId,
       title: '',
@@ -219,7 +248,7 @@ export function CalendarPage() {
       priority: null,
       visibility: 'default',
       categoryId: null,
-      participantIds: user ? [user.id] : [],
+      participantIds: defaultParticipant ? [defaultParticipant] : [],
       recurrence: null
     };
   }
@@ -275,8 +304,55 @@ export function CalendarPage() {
 
   if (!settings) return null;
 
+  const viewsMenu = (
+    <div className="toolbar-menu header-views-menu" ref={viewsMenuRef}>
+      <button
+        type="button"
+        className="button ghost nav-menu-button"
+        onClick={() => setViewsMenuOpen((current) => !current)}
+      >
+        {t('nav.views')} ▾
+      </button>
+      {viewsMenuOpen && (
+        <div className="menu-popover">
+          <button
+            type="button"
+            className={`menu-item ${activeViewId === null ? 'active' : ''}`}
+            onClick={showAllResources}
+          >
+            {t('calendar.allResources')}
+          </button>
+          {views.length > 0 && <div className="menu-divider" />}
+          {views.map((customView) => (
+            <button
+              key={customView.id}
+              type="button"
+              className={`menu-item ${activeViewId === customView.id ? 'active' : ''}`}
+              onClick={() => applyView(customView)}
+            >
+              <span>{customView.name}</span>
+              <small>{customView.isShared ? t('views.global') : t('views.personal')}</small>
+            </button>
+          ))}
+          <div className="menu-divider" />
+          <button
+            type="button"
+            className="menu-item"
+            onClick={() => {
+              setViewsMenuOpen(false);
+              setViewsOpen(true);
+            }}
+          >
+            {t('calendar.manageViews')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="calendar-page">
+      {headerSlot && createPortal(viewsMenu, headerSlot)}
       <section className="calendar-main">
         {timeZone !== browserTimeZone && !timezoneNoticeDismissed && (
           <div className="alert info timezone-alert">
@@ -324,49 +400,6 @@ export function CalendarPage() {
           <span className="timezone-badge" title={t('event.timezoneHint')}>
             {timeZone}
           </span>
-          <div className="toolbar-menu" ref={viewsMenuRef}>
-            <button
-              type="button"
-              className="button small"
-              onClick={() => setViewsMenuOpen((current) => !current)}
-            >
-              {t('nav.views')} ▾
-            </button>
-            {viewsMenuOpen && (
-              <div className="menu-popover">
-                <button
-                  type="button"
-                  className={`menu-item ${activeViewId === null ? 'active' : ''}`}
-                  onClick={showAllResources}
-                >
-                  {t('calendar.allResources')}
-                </button>
-                {views.length > 0 && <div className="menu-divider" />}
-                {views.map((customView) => (
-                  <button
-                    key={customView.id}
-                    type="button"
-                    className={`menu-item ${activeViewId === customView.id ? 'active' : ''}`}
-                    onClick={() => applyView(customView)}
-                  >
-                    <span>{customView.name}</span>
-                    <small>{customView.isShared ? t('views.global') : t('views.personal')}</small>
-                  </button>
-                ))}
-                <div className="menu-divider" />
-                <button
-                  type="button"
-                  className="menu-item"
-                  onClick={() => {
-                    setViewsMenuOpen(false);
-                    setViewsOpen(true);
-                  }}
-                >
-                  {t('calendar.manageViews')}
-                </button>
-              </div>
-            )}
-          </div>
           <div className="spacer" />
           <button
             type="button"

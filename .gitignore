@@ -13,3 +13,4 @@ Thumbs.db
 *.sqlite
 *.sqlite-shm
 *.sqlite-wal
+client/public/tinymce/

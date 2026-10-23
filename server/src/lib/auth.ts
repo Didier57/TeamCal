@@ -17,6 +17,8 @@ export interface UserRow {
   time_format: string | null;
   default_view: string;
   theme: string | null;
+  theme_colors: string | null;
+  feed_token: string | null;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
@@ -51,6 +53,14 @@ export interface SessionContext {
 }
 
 export function publicUser(user: UserRow) {
+  let themeColors: unknown = null;
+  if (user.theme_colors) {
+    try {
+      themeColors = JSON.parse(user.theme_colors);
+    } catch {
+      themeColors = null;
+    }
+  }
   return {
     id: user.id,
     username: user.username,
@@ -65,9 +75,23 @@ export function publicUser(user: UserRow) {
     timeFormat: user.time_format,
     defaultView: user.default_view,
     theme: user.theme,
+    themeColors,
+    feedToken: user.feed_token,
     lastLoginAt: user.last_login_at,
     createdAt: user.created_at
   };
+}
+
+export function ensureFeedToken(db: DB, user: UserRow): string {
+  if (user.feed_token) return user.feed_token;
+  const token = randomToken(24);
+  db.prepare('UPDATE users SET feed_token = ?, updated_at = ? WHERE id = ?').run(
+    token,
+    new Date().toISOString(),
+    user.id
+  );
+  user.feed_token = token;
+  return token;
 }
 
 export function isSecureRequest(req: Request): boolean {

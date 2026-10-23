@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { publicUser, requireAdmin, requireAuth, type UserRow } from '../lib/auth';
 import { hashPassword, passwordIssues } from '../lib/password';
 import { audit } from '../lib/audit';
-import { asyncHandler, HttpError, newId, nowIso } from '../lib/util';
+import { asyncHandler, HttpError, newId, nowIso, randomToken } from '../lib/util';
 import { isValidTimeZone } from '../lib/time';
 
 const createSchema = z.object({
@@ -82,8 +82,8 @@ export function userRoutes(): Router {
       req.db.transaction(() => {
         req.db
           .prepare(
-            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, default_view, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'week', ?, ?)`
+            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, default_view, feed_token, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 'week', ?, ?, ?)`
           )
           .run(
             id,
@@ -95,6 +95,7 @@ export function userRoutes(): Router {
             body.isAdmin ? 1 : 0,
             body.language,
             body.timezone ?? null,
+            randomToken(24),
             now,
             now
           );

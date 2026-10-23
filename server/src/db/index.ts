@@ -153,6 +153,17 @@ CREATE TABLE email_log (
   created_at TEXT NOT NULL
 );
 `
+  },
+  {
+    id: 2,
+    sql: `ALTER TABLE users ADD COLUMN theme_colors TEXT;`
+  },
+  {
+    id: 3,
+    sql: `
+ALTER TABLE users ADD COLUMN feed_token TEXT;
+CREATE UNIQUE INDEX idx_users_feed_token ON users(feed_token) WHERE feed_token IS NOT NULL;
+`
   }
 ];
 

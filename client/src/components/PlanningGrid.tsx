@@ -1,4 +1,4 @@
-import { useMemo, useRef, type DragEvent } from 'react';
+import { Fragment, useMemo, useRef, type DragEvent } from 'react';
 import { useI18n } from '../i18n';
 import { addDaysToDateKey, toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
 import type { Calendar, Occurrence, PublicSettings, ViewKind } from '../types';
@@ -149,6 +149,53 @@ export function PlanningGrid({
     return map;
   }, [events]);
 
+  const monthWeeks = useMemo(() => {
+    const monthStart = `${anchorKey.slice(0, 7)}-01`;
+    const monthEnd = `${anchorKey.slice(0, 7)}-${pad(daysInMonth(anchorKey))}`;
+    const gridStart = startOfWeekKey(monthStart, settings.firstDay);
+    const gridEnd = addDaysToKey(startOfWeekKey(monthEnd, settings.firstDay), 6);
+    const weeks: string[][] = [];
+    let current = gridStart;
+    while (current <= gridEnd) {
+      weeks.push(Array.from({ length: 7 }, (_, index) => addDaysToKey(current, index)));
+      current = addDaysToKey(current, 7);
+    }
+    return weeks;
+  }, [anchorKey, settings.firstDay]);
+
+  const monthEventsByDay = useMemo(() => {
+    const map = new Map<string, Occurrence[]>();
+    for (const occurrence of events) {
+      const startKey = occurrence.allDay
+        ? occurrence.start.slice(0, 10)
+        : dateKeyOf(new Date(occurrence.start), timeZone);
+      const endKey = occurrence.allDay
+        ? occurrence.end.slice(0, 10)
+        : dateKeyOf(new Date(new Date(occurrence.end).getTime() - 1000), timeZone);
+      let key = startKey;
+      let guard = 0;
+      while (key <= endKey && guard < 400) {
+        const list = map.get(key) ?? [];
+        list.push(occurrence);
+        map.set(key, list);
+        key = addDaysToKey(key, 1);
+        guard += 1;
+      }
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+        return a.start.localeCompare(b.start) || a.title.localeCompare(b.title);
+      });
+    }
+    return map;
+  }, [events, timeZone]);
+
+  const calendarById = useMemo(
+    () => new Map(calendars.map((calendar) => [calendar.id, calendar])),
+    [calendars]
+  );
+
   function timeLabel(occurrence: Occurrence): string {
     if (occurrence.allDay) return t('event.allDay');
     const formatter = new Intl.DateTimeFormat(locale, {
@@ -186,6 +233,40 @@ export function PlanningGrid({
       >
         {!occurrence.allDay && <span className="planning-event-time">{timeLabel(occurrence)}</span>}
         <span className="planning-event-title">{occurrence.title}</span>
+      </div>
+    );
+  }
+
+  function monthChip(occurrence: Occurrence) {
+    const color = occurrence.calendarColor;
+    const owner = calendarById.get(occurrence.calendarId)?.ownerName ?? '';
+    const time = occurrence.allDay ? '' : timeLabel(occurrence);
+    return (
+      <div
+        key={occurrence.id}
+        className="month-event"
+        style={{
+          borderLeftColor: color,
+          background: `color-mix(in srgb, ${color} 16%, transparent)`,
+          color: 'var(--color-text)'
+        }}
+        draggable
+        onDragStart={(event) => {
+          dragged.current = occurrence;
+          event.dataTransfer.effectAllowed = 'move';
+          event.dataTransfer.setData('text/plain', occurrence.id);
+        }}
+        onDragEnd={() => {
+          dragged.current = null;
+        }}
+        onClick={(event) => {
+          event.stopPropagation();
+          onEdit(occurrence);
+        }}
+        title={`${owner ? `${owner} · ` : ''}${time ? `${time} · ` : ''}${occurrence.title}`}
+      >
+        {time && <span className="month-event-time">{time}</span>}
+        <span className="month-event-title">{occurrence.title}</span>
       </div>
     );
   }
@@ -230,28 +311,95 @@ export function PlanningGrid({
   }
 
   const rowStyle = (columns: number) => ({
-    gridTemplateColumns: `190px repeat(${columns}, minmax(${view === 'month' ? 118 : 96}px, 1fr))`
+    gridTemplateColumns: `190px repeat(${columns}, minmax(96px, 1fr))`
   });
 
-  const headerCell = (key: string, compact = false) => {
+  const headerCell = (key: string) => {
     const isToday = key === todayKey;
-    const weekday = formatHeader(key, locale, { weekday: compact ? 'narrow' : 'short' });
+    const weekday = formatHeader(key, locale, { weekday: 'short' });
     const day = formatHeader(key, locale, { day: '2-digit' });
     const month = formatHeader(key, locale, { month: 'short' });
     return (
       <div key={key} className={`planning-day-head ${isToday ? 'today' : ''}`}>
-        {view === 'month' && (key === dayKeys[0] || weekdayOfKey(key) === settings.firstDay) && (
-          <span className="planning-week-tag">
-            {t('common.week').slice(0, 1)}
-            {isoWeek(key)}
-          </span>
-        )}
         <span className="planning-weekday">{weekday}</span>
         <span className="planning-day-number">{day}</span>
-        {view !== 'month' && <span className="planning-month">{month}</span>}
+        <span className="planning-month">{month}</span>
       </div>
     );
   };
+
+  if (view === 'month') {
+    const createCalendar = calendars.find((calendar) => calendar.canCreate);
+    const weekdays = monthWeeks[0].map((key) =>
+      formatHeader(key, locale, { weekday: 'long' })
+    );
+    return (
+      <div className="planning-scroll month-scroll">
+        <div className="month-grid">
+          <div className="month-head month-corner">{t('calendar.weekShort')}</div>
+          {weekdays.map((label, index) => (
+            <div className="month-head" key={`${label}-${index}`}>
+              {label}
+            </div>
+          ))}
+          {monthWeeks.map((week) => (
+            <Fragment key={week[0]}>
+              <div className="month-week-number">{isoWeek(week[0])}</div>
+              {week.map((key) => {
+                const list = monthEventsByDay.get(key) ?? [];
+                const inMonth = key.slice(0, 7) === anchorKey.slice(0, 7);
+                const isToday = key === todayKey;
+                const weekend = weekdayOfKey(key) === 0 || weekdayOfKey(key) === 6;
+                const background = isToday
+                  ? 'var(--color-today-bg)'
+                  : list.length > 0
+                    ? 'var(--color-event-day-bg)'
+                    : weekend
+                      ? 'var(--color-weekend-bg)'
+                      : !inMonth
+                        ? 'var(--color-other-month-bg)'
+                        : 'var(--color-cell-bg)';
+                const className = [
+                  'month-day',
+                  !inMonth ? 'other-month' : '',
+                  weekend ? 'weekend' : '',
+                  isToday ? 'today' : '',
+                  list.length > 0 ? 'has-events' : '',
+                  createCalendar ? 'creatable' : ''
+                ]
+                  .filter(Boolean)
+                  .join(' ');
+                return (
+                  <div
+                    key={key}
+                    className={className}
+                    style={{ background }}
+                    onClick={() => createCalendar && createInCell(createCalendar, key)}
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) =>
+                      dropOnCell(event, dragged.current?.calendarId ?? createCalendar?.id ?? '', key)
+                    }
+                  >
+                    <div className="month-day-head">
+                      <span className="month-day-number">
+                        {formatHeader(key, locale, { day: 'numeric' })}
+                      </span>
+                      {!inMonth && (
+                        <span className="month-day-month">
+                          {formatHeader(key, locale, { month: 'short' })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="month-day-events">{list.map(monthChip)}</div>
+                  </div>
+                );
+              })}
+            </Fragment>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   if (view === 'day') {
     const resourceCalendars = calendars;
@@ -321,7 +469,7 @@ export function PlanningGrid({
           ) : (
             <div className="planning-corner">{t('calendar.resources')}</div>
           )}
-          {dayKeys.map((key) => headerCell(key, view === 'month'))}
+          {dayKeys.map((key) => headerCell(key))}
         </div>
         {calendars.map((calendar) => (
           <div className="planning-row" key={calendar.id} style={rowStyle(headColumns)}>

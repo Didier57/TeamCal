@@ -9,6 +9,8 @@ export interface EmailTexts {
   where: string;
   details: string;
   addToCalendar: string;
+  subscribe: string;
+  subscribeAction: string;
   footer: string;
   organizer: string;
   participants: string;
@@ -29,6 +31,9 @@ const texts: Record<EmailLanguage, EmailTexts> = {
     where: 'Lieu',
     details: 'Description',
     addToCalendar: 'La pièce jointe invitation.ics permet d’ajouter ou de mettre à jour l’événement dans votre calendrier.',
+    subscribe:
+      'Pour que vos événements apparaissent automatiquement dans votre agenda, abonnez-vous une seule fois à votre planning TeamCal.',
+    subscribeAction: 'Gérer mon abonnement',
     footer: 'Cet e-mail a été envoyé automatiquement par TeamCal.',
     organizer: 'Organisateur',
     participants: 'Participants'
@@ -47,6 +52,9 @@ const texts: Record<EmailLanguage, EmailTexts> = {
     where: 'Location',
     details: 'Description',
     addToCalendar: 'The attached invitation.ics file lets you add or update the event in your calendar.',
+    subscribe:
+      'To have your events appear automatically in your calendar, subscribe once to your TeamCal schedule.',
+    subscribeAction: 'Manage my subscription',
     footer: 'This e-mail was sent automatically by TeamCal.',
     organizer: 'Organizer',
     participants: 'Participants'
@@ -65,6 +73,9 @@ const texts: Record<EmailLanguage, EmailTexts> = {
     where: 'Ort',
     details: 'Beschreibung',
     addToCalendar: 'Die angehängte Datei invitation.ics fügt den Termin zu Ihrem Kalender hinzu oder aktualisiert ihn.',
+    subscribe:
+      'Damit Ihre Termine automatisch in Ihrem Kalender erscheinen, abonnieren Sie einmalig Ihren TeamCal-Kalender.',
+    subscribeAction: 'Abonnement verwalten',
     footer: 'Diese E-Mail wurde automatisch von TeamCal gesendet.',
     organizer: 'Organisator',
     participants: 'Teilnehmer'

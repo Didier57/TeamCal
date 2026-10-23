@@ -1,14 +1,26 @@
 import { NavLink, Outlet } from 'react-router-dom';
+import { apiPut } from '../api';
 import { useAuth } from '../app-context';
 import { languageLabel, useI18n } from '../i18n';
-import type { Language } from '../types';
+import type { Language, User } from '../types';
 
 export function AppLayout() {
-  const { user, settings, logout, theme, setTheme } = useAuth();
+  const { user, settings, logout, theme, setTheme, setUser } = useAuth();
   const { t, language, setLanguage } = useI18n();
   if (!user || !settings) return null;
 
   const displayName = `${user.firstName} ${user.lastName}`.trim() || user.username;
+
+  async function changeLanguage(next: Language) {
+    const previous = user!.language;
+    setLanguage(next);
+    try {
+      const response = await apiPut<{ user: User }>('/auth/me/preferences', { language: next });
+      setUser(response.user);
+    } catch {
+      setLanguage(previous);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -24,6 +36,7 @@ export function AppLayout() {
           <NavLink to="/" end>
             {t('nav.calendar')}
           </NavLink>
+          <span id="header-views-slot" className="header-views-slot" />
           {user.isAdmin && <NavLink to="/admin">{t('nav.admin')}</NavLink>}
           <NavLink to="/preferences">{t('nav.preferences')}</NavLink>
         </nav>
@@ -31,7 +44,7 @@ export function AppLayout() {
           <select
             aria-label={t('common.language')}
             value={language}
-            onChange={(event) => setLanguage(event.target.value as Language)}
+            onChange={(event) => void changeLanguage(event.target.value as Language)}
           >
             <option value="fr">{languageLabel('fr')}</option>
             <option value="en">{languageLabel('en')}</option>

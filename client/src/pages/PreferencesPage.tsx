@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from 'react';
-import { apiPost, apiPut, ApiError } from '../api';
-import { useAuth } from '../app-context';
+import { useEffect, useState, type FormEvent } from 'react';
+import { apiGet, apiPost, apiPut, ApiError } from '../api';
+import { defaultThemeColors, useAuth } from '../app-context';
 import { languageLabel, useI18n } from '../i18n';
-import type { Language, ThemeKind, User, ViewKind } from '../types';
+import type { CustomView, Language, ThemeColors, ThemeKind, User } from '../types';
+import { ThemeColorEditor } from '../components/ThemeColorEditor';
 
 const timezones = [
   'Europe/Paris',
@@ -32,18 +33,86 @@ export function PreferencesPage() {
   const [timezone, setTimezone] = useState(user?.timezone ?? '');
   const [dateFormat, setDateFormat] = useState(user?.dateFormat ?? '');
   const [timeFormat, setTimeFormat] = useState(user?.timeFormat ?? '');
-  const [defaultView, setDefaultView] = useState<ViewKind>(user?.defaultView ?? 'week');
+  const [defaultView, setDefaultView] = useState<string>(user?.defaultView ?? 'week');
+  const [globalViews, setGlobalViews] = useState<CustomView[]>([]);
   const [theme, setThemeValue] = useState<ThemeKind | ''>(user?.theme ?? '');
+  const [useCustomColors, setUseCustomColors] = useState(Boolean(user?.themeColors));
+  const [themeColors, setThemeColors] = useState<{ light: ThemeColors; dark: ThemeColors }>({
+    light: {
+      ...defaultThemeColors.light,
+      ...(settings?.theme?.light ?? {}),
+      ...(user?.themeColors?.light ?? {})
+    },
+    dark: {
+      ...defaultThemeColors.dark,
+      ...(settings?.theme?.dark ?? {}),
+      ...(user?.themeColors?.dark ?? {})
+    }
+  });
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileFlash, setProfileFlash] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordFlash, setPasswordFlash] = useState<string | null>(null);
+  const [feedFlash, setFeedFlash] = useState<string | null>(null);
+  const [feedError, setFeedError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    let active = true;
+    apiGet<CustomView[]>('/views')
+      .then((list) => {
+        if (!active) return;
+        const shared = list.filter((view) => view.isShared);
+        setGlobalViews(shared);
+        setDefaultView((current) =>
+          current.startsWith('view:') && !shared.some((view) => `view:${view.id}` === current)
+            ? 'week'
+            : current
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
   if (!user || !settings) return null;
+
+  const feedBase = (settings.baseUrl || window.location.origin).replace(/\/+$/, '');
+  const feedUrl = user.feedToken ? `${feedBase}/api/feed/${user.feedToken}.ics` : '';
+  const googleFeedUrl = feedUrl
+    ? `https://calendar.google.com/calendar/r/settings/addbyurl?url=${encodeURIComponent(feedUrl)}`
+    : '';
+
+  async function copyFeed() {
+    if (!feedUrl) return;
+    try {
+      await navigator.clipboard.writeText(feedUrl);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setFeedError(t('common.error'));
+    }
+  }
+
+  async function regenerateFeed() {
+    setBusy(true);
+    setFeedError(null);
+    setFeedFlash(null);
+    try {
+      const response = await apiPost<{ feedToken: string }>('/auth/me/feed/regenerate');
+      setUser({ ...user!, feedToken: response.feedToken });
+      setFeedFlash(t('prefs.regenerated'));
+    } catch (err) {
+      setFeedError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
@@ -60,7 +129,8 @@ export function PreferencesPage() {
         dateFormat: dateFormat || null,
         timeFormat: timeFormat || null,
         defaultView,
-        theme: theme || null
+        theme: theme || null,
+        themeColors: settings?.allowUserColors && useCustomColors ? themeColors : null
       });
       setUser(response.user);
       setLanguage(language);
@@ -166,10 +236,19 @@ export function PreferencesPage() {
           </label>
           <label>
             <span>{t('admin.defaultView')}</span>
-            <select value={defaultView} onChange={(event) => setDefaultView(event.target.value as ViewKind)}>
+            <select value={defaultView} onChange={(event) => setDefaultView(event.target.value)}>
               <option value="day">{t('common.day')}</option>
               <option value="week">{t('common.week')}</option>
               <option value="month">{t('common.month')}</option>
+              {globalViews.length > 0 && (
+                <optgroup label={t('prefs.globalViews')}>
+                  {globalViews.map((customView) => (
+                    <option key={customView.id} value={`view:${customView.id}`}>
+                      {customView.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </label>
           <label>
@@ -184,12 +263,67 @@ export function PreferencesPage() {
             </select>
           </label>
         </div>
+        {settings.allowUserColors && (
+          <div className="theme-user-block">
+            <div className="section-header">
+              <h3>{t('prefs.customColors')}</h3>
+              <label className="checkbox">
+                <input
+                  type="checkbox"
+                  checked={useCustomColors}
+                  onChange={(event) => setUseCustomColors(event.target.checked)}
+                />
+                <span>{t('prefs.useCustomColors')}</span>
+              </label>
+            </div>
+            {useCustomColors ? (
+              <ThemeColorEditor value={themeColors} onChange={setThemeColors} showPreview />
+            ) : (
+              <p className="muted">{t('theme.globalColors')}</p>
+            )}
+          </div>
+        )}
         <div className="row-actions">
           <button type="submit" className="button primary" disabled={busy}>
             {t('common.save')}
           </button>
         </div>
       </form>
+
+      <section className="panel">
+        <h2>{t('prefs.feedTitle')}</h2>
+        {feedFlash && <div className="alert info">{feedFlash}</div>}
+        {feedError && <div className="alert error">{feedError}</div>}
+        <p className="muted">{t('prefs.feedHelp')}</p>
+        <div className="feed-url-row">
+          <input
+            readOnly
+            value={feedUrl}
+            onFocus={(event) => event.currentTarget.select()}
+            aria-label={t('prefs.feedTitle')}
+          />
+          <button type="button" className="button" onClick={copyFeed} disabled={!feedUrl}>
+            {copied ? t('prefs.copied') : t('prefs.copy')}
+          </button>
+        </div>
+        <div className="row-actions">
+          {googleFeedUrl && (
+            <a className="button" href={googleFeedUrl} target="_blank" rel="noreferrer">
+              {t('prefs.openGoogle')}
+            </a>
+          )}
+          <button
+            type="button"
+            className="button"
+            onClick={regenerateFeed}
+            disabled={busy || !feedUrl}
+          >
+            {t('prefs.regenerate')}
+          </button>
+        </div>
+        <p className="hint">{t('prefs.feedSecret')}</p>
+        <p className="hint">{t('prefs.feedDelay')}</p>
+      </section>
 
       <form className="panel" onSubmit={savePassword}>
         <h2>{t('prefs.security')}</h2>

@@ -1,4 +1,4 @@
-import {
+﻿import {
   createContext,
   useCallback,
   useContext,
@@ -35,7 +35,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const fallbackTheme: { light: ThemeColors; dark: ThemeColors } = {
+export const defaultThemeColors: { light: ThemeColors; dark: ThemeColors } = {
   light: {
     primary: '#2f6feb',
     accent: '#1f9d55',
@@ -43,7 +43,19 @@ const fallbackTheme: { light: ThemeColors; dark: ThemeColors } = {
     surface: '#ffffff',
     text: '#1c2434',
     muted: '#64748b',
-    border: '#dbe2ee'
+    border: '#dbe2ee',
+    documentTitle: '#1c2434',
+    eventText: '#ffffff',
+    headerBackground: '#eef2f8',
+    headerText: '#1c2434',
+    cellBackground: '#ffffff',
+    todayBackground: '#e8f0ff',
+    eventDayBackground: '#fef9db',
+    weekendBackground: '#f3f4f6',
+    otherMonthBackground: '#f8fafc',
+    weekNumberColor: '#e8590c',
+    eventDetailsBackground: '#ffffff',
+    eventDetailsText: '#1c2434'
   },
   dark: {
     primary: '#6ea8ff',
@@ -52,7 +64,19 @@ const fallbackTheme: { light: ThemeColors; dark: ThemeColors } = {
     surface: '#182132',
     text: '#e6edf7',
     muted: '#93a3b8',
-    border: '#2a3648'
+    border: '#2a3648',
+    documentTitle: '#e6edf7',
+    eventText: '#ffffff',
+    headerBackground: '#1f2a3d',
+    headerText: '#e6edf7',
+    cellBackground: '#182132',
+    todayBackground: '#20304a',
+    eventDayBackground: '#23351f',
+    weekendBackground: '#141c29',
+    otherMonthBackground: '#121a26',
+    weekNumberColor: '#f97316',
+    eventDetailsBackground: '#1f2a3d',
+    eventDetailsText: '#e6edf7'
   }
 };
 
@@ -66,6 +90,18 @@ function applyThemeColors(theme: ThemeKind, colors: ThemeColors) {
   root.style.setProperty('--color-text', colors.text);
   root.style.setProperty('--color-muted', colors.muted);
   root.style.setProperty('--color-border', colors.border);
+  root.style.setProperty('--color-title', colors.documentTitle);
+  root.style.setProperty('--color-event-text', colors.eventText);
+  root.style.setProperty('--color-header-bg', colors.headerBackground);
+  root.style.setProperty('--color-header-text', colors.headerText);
+  root.style.setProperty('--color-cell-bg', colors.cellBackground);
+  root.style.setProperty('--color-today-bg', colors.todayBackground);
+  root.style.setProperty('--color-event-day-bg', colors.eventDayBackground);
+  root.style.setProperty('--color-weekend-bg', colors.weekendBackground);
+  root.style.setProperty('--color-other-month-bg', colors.otherMonthBackground);
+  root.style.setProperty('--color-week-number', colors.weekNumberColor);
+  root.style.setProperty('--color-event-details-bg', colors.eventDetailsBackground);
+  root.style.setProperty('--color-event-details-text', colors.eventDetailsText);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -106,10 +142,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!settings) return;
-    const colors = settings.theme?.[theme] ?? fallbackTheme[theme];
-    applyThemeColors(theme, colors);
+    const globalColors = settings.theme?.[theme] ?? {};
+    const userColors =
+      settings.allowUserColors && user?.themeColors?.[theme] ? user.themeColors[theme] : undefined;
+    applyThemeColors(theme, {
+      ...defaultThemeColors[theme],
+      ...globalColors,
+      ...(userColors ?? {})
+    });
     document.title = settings.appName || 'TeamCal';
-  }, [settings, theme]);
+  }, [settings, theme, user?.themeColors]);
 
   const login = useCallback(
     async (username: string, password: string, remember: boolean) => {

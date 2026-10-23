@@ -14,8 +14,10 @@ export interface User {
   timezone: string | null;
   dateFormat?: string | null;
   timeFormat?: '12' | '24' | null;
-  defaultView?: ViewKind;
+  defaultView?: ViewKind | `view:${string}`;
   theme?: ThemeKind | null;
+  themeColors?: { light: ThemeColors; dark: ThemeColors } | null;
+  feedToken?: string | null;
   lastLoginAt?: string | null;
   createdAt?: string;
 }
@@ -28,6 +30,18 @@ export interface ThemeColors {
   text: string;
   muted: string;
   border: string;
+  documentTitle: string;
+  eventText: string;
+  headerBackground: string;
+  headerText: string;
+  cellBackground: string;
+  todayBackground: string;
+  eventDayBackground: string;
+  weekendBackground: string;
+  otherMonthBackground: string;
+  weekNumberColor: string;
+  eventDetailsBackground: string;
+  eventDetailsText: string;
 }
 
 export interface PublicSettings {
@@ -50,6 +64,7 @@ export interface PublicSettings {
     recurrence: boolean;
   };
   allowHtmlDescription: boolean;
+  allowUserColors: boolean;
   priorities: string[];
   visibilityOptions: string[];
   theme: { light: ThemeColors; dark: ThemeColors };

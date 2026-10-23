@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { hashPassword, passwordIssues } from '../lib/password';
 import { createSession, publicUser, type UserRow } from '../lib/auth';
 import { audit } from '../lib/audit';
-import { asyncHandler, HttpError, newId, nowIso } from '../lib/util';
+import { asyncHandler, HttpError, newId, nowIso, randomToken } from '../lib/util';
 import { SettingsStore } from '../settings';
 import { isValidTimeZone } from '../lib/time';
 
@@ -50,8 +50,8 @@ export function setupRoutes(): Router {
       req.db.transaction(() => {
         req.db
           .prepare(
-            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, default_view, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?, 'week', ?, ?)`
+            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, default_view, feed_token, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?, 'week', ?, ?, ?)`
           )
           .run(
             userId,
@@ -62,6 +62,7 @@ export function setupRoutes(): Router {
             hash,
             body.language,
             body.timezone,
+            randomToken(24),
             now,
             now
           );

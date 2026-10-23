@@ -4,15 +4,19 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node scripts/copy-tinymce.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-tinymce.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tinymce/tinymce-react": "^6.3.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.28.0",
+    "tinymce": "^8.10.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

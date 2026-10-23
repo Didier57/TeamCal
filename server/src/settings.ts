@@ -10,6 +10,18 @@ export interface ThemeColors {
   text: string;
   muted: string;
   border: string;
+  documentTitle: string;
+  eventText: string;
+  headerBackground: string;
+  headerText: string;
+  cellBackground: string;
+  todayBackground: string;
+  eventDayBackground: string;
+  weekendBackground: string;
+  otherMonthBackground: string;
+  weekNumberColor: string;
+  eventDetailsBackground: string;
+  eventDetailsText: string;
 }
 
 export interface SmtpSettings {
@@ -42,6 +54,7 @@ export interface AppSettings {
     recurrence: boolean;
   };
   allowHtmlDescription: boolean;
+  allowUserColors: boolean;
   priorities: string[];
   visibilityOptions: string[];
   theme: { light: ThemeColors; dark: ThemeColors };
@@ -70,6 +83,7 @@ export const defaultSettings: AppSettings = {
     recurrence: true
   },
   allowHtmlDescription: false,
+  allowUserColors: false,
   priorities: ['low', 'normal', 'high'],
   visibilityOptions: ['default', 'private', 'public'],
   theme: {
@@ -80,7 +94,19 @@ export const defaultSettings: AppSettings = {
       surface: '#ffffff',
       text: '#1c2434',
       muted: '#64748b',
-      border: '#dbe2ee'
+      border: '#dbe2ee',
+      documentTitle: '#1c2434',
+      eventText: '#ffffff',
+      headerBackground: '#eef2f8',
+      headerText: '#1c2434',
+      cellBackground: '#ffffff',
+      todayBackground: '#e8f0ff',
+      eventDayBackground: '#fef9db',
+      weekendBackground: '#f3f4f6',
+      otherMonthBackground: '#f8fafc',
+      weekNumberColor: '#e8590c',
+      eventDetailsBackground: '#ffffff',
+      eventDetailsText: '#1c2434'
     },
     dark: {
       primary: '#6ea8ff',
@@ -89,7 +115,19 @@ export const defaultSettings: AppSettings = {
       surface: '#182132',
       text: '#e6edf7',
       muted: '#93a3b8',
-      border: '#2a3648'
+      border: '#2a3648',
+      documentTitle: '#e6edf7',
+      eventText: '#ffffff',
+      headerBackground: '#1f2a3d',
+      headerText: '#e6edf7',
+      cellBackground: '#182132',
+      todayBackground: '#20304a',
+      eventDayBackground: '#23351f',
+      weekendBackground: '#141c29',
+      otherMonthBackground: '#121a26',
+      weekNumberColor: '#f97316',
+      eventDetailsBackground: '#1f2a3d',
+      eventDetailsText: '#e6edf7'
     }
   },
   smtp: {
@@ -154,6 +192,7 @@ export class SettingsStore {
       defaultView: s.defaultView,
       fields: s.fields,
       allowHtmlDescription: s.allowHtmlDescription,
+      allowUserColors: s.allowUserColors,
       priorities: s.priorities,
       visibilityOptions: s.visibilityOptions,
       theme: s.theme,
@@ -162,23 +201,28 @@ export class SettingsStore {
   }
 }
 
-function mergeSettings(base: AppSettings, patch: Record<string, unknown>): AppSettings {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function mergeDeep(base: unknown, patch: unknown): unknown {
+  if (!isPlainObject(base) || !isPlainObject(patch)) return patch;
   const result: Record<string, unknown> = { ...base };
   for (const [key, value] of Object.entries(patch)) {
-    if (!(key in base)) continue;
-    const currentValue = (base as unknown as Record<string, unknown>)[key];
-    if (
-      value &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      currentValue &&
-      typeof currentValue === 'object' &&
-      !Array.isArray(currentValue)
-    ) {
-      result[key] = { ...(currentValue as object), ...(value as object) };
-    } else if (value !== undefined) {
+    if (value === undefined) continue;
+    if (key in base && isPlainObject(base[key]) && isPlainObject(value)) {
+      result[key] = mergeDeep(base[key], value);
+    } else {
       result[key] = value;
     }
   }
-  return result as unknown as AppSettings;
+  return result;
+}
+
+function mergeSettings(base: AppSettings, patch: Record<string, unknown>): AppSettings {
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (key in base) filtered[key] = value;
+  }
+  return mergeDeep(base, filtered) as AppSettings;
 }

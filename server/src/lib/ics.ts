@@ -115,6 +115,53 @@ export function buildIcs(input: IcsInput): string {
   return lines.map(foldLine).join('\r\n') + '\r\n';
 }
 
+export interface FeedItem {
+  uid: string;
+  title: string;
+  description?: string | null;
+  location?: string | null;
+  url?: string | null;
+  start: string;
+  end: string;
+  allDay: boolean;
+  sequence?: number;
+  stamp?: string | Date;
+}
+
+export function buildFeedIcs(calendarName: string, items: FeedItem[]): string {
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//TeamCal//TeamCal//FR',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    `X-WR-CALNAME:${escapeText(calendarName)}`
+  ];
+  for (const item of items) {
+    const stamp = utcStamp(item.stamp ? new Date(item.stamp) : new Date());
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${item.uid}`);
+    lines.push(`DTSTAMP:${stamp}`);
+    lines.push(`SEQUENCE:${item.sequence ?? 0}`);
+    if (item.allDay) {
+      lines.push(`DTSTART;VALUE=DATE:${dateValue(item.start)}`);
+      lines.push(`DTEND;VALUE=DATE:${dateValue(nextDay(item.end))}`);
+    } else {
+      lines.push(`DTSTART:${utcStamp(new Date(item.start))}`);
+      lines.push(`DTEND:${utcStamp(new Date(item.end))}`);
+    }
+    lines.push(`SUMMARY:${escapeText(item.title)}`);
+    if (item.description) lines.push(`DESCRIPTION:${escapeText(item.description)}`);
+    if (item.location) lines.push(`LOCATION:${escapeText(item.location)}`);
+    if (item.url) lines.push(`URL:${item.url}`);
+    lines.push('STATUS:CONFIRMED');
+    lines.push(`TRANSP:${item.allDay ? 'TRANSPARENT' : 'OPAQUE'}`);
+    lines.push('END:VEVENT');
+  }
+  lines.push('END:VCALENDAR');
+  return lines.map(foldLine).join('\r\n') + '\r\n';
+}
+
 export function googleCalendarUrl(input: {
   title: string;
   description?: string | null;
