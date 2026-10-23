@@ -1,0 +1,33 @@
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { useAuth } from './app-context';
+import { AppLayout } from './components/AppLayout';
+import { CalendarPage } from './pages/CalendarPage';
+import { AdminPage } from './pages/AdminPage';
+import { PreferencesPage } from './pages/PreferencesPage';
+import { LoginPage } from './pages/LoginPage';
+import { SetupPage } from './pages/SetupPage';
+
+export function App() {
+  const { user, loading, needsSetup } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="splash">
+        <div className="spinner" />
+      </div>
+    );
+  }
+  if (needsSetup) return <SetupPage />;
+  if (!user) return <LoginPage />;
+
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route path="/" element={<CalendarPage />} />
+        <Route path="/preferences" element={<PreferencesPage />} />
+        <Route path="/admin" element={user.isAdmin ? <AdminPage /> : <Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  );
+}
