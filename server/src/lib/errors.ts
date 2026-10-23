@@ -8,7 +8,11 @@ export function notFound(_req: Request, res: Response) {
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction) {
   if (err instanceof HttpError) {
-    return res.status(err.status).json({ error: err.message, code: err.code });
+    return res.status(err.status).json({
+      error: err.message,
+      code: err.code,
+      ...(err.details ? { details: err.details } : {})
+    });
   }
   if (err && typeof err === 'object' && 'type' in err && (err as { type: string }).type === 'entity.parse.failed') {
     return res.status(400).json({ error: 'invalid_json' });

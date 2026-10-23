@@ -6,6 +6,8 @@ import { toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
 import type {
   Calendar,
   Category,
+  EventConflict,
+  EventConflictDetails,
   Occurrence,
   PublicSettings,
   Recurrence,
@@ -81,7 +83,7 @@ export function EventDialog({
   onClose,
   onSaved
 }: Props) {
-  const { t, errorMessage } = useI18n();
+  const { t, locale, errorMessage } = useI18n();
   const timeZone = useEffectiveTimeZone();
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [form, setForm] = useState<EventDraft>(draft);
@@ -89,6 +91,9 @@ export function EventDialog({
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<'save' | 'delete' | null>(null);
   const [participantFilter, setParticipantFilter] = useState('');
+  const [conflicts, setConflicts] = useState<EventConflict[] | null>(null);
+  const [conflictTotal, setConflictTotal] = useState(0);
+  const [conflictScope, setConflictScope] = useState<'series' | 'occurrence' | null>(null);
 
   const isRecurring = Boolean(mode === 'edit' && occurrence?.recurring);
   const canDelete = Boolean(mode === 'edit' && occurrence?.deletable);
@@ -112,7 +117,35 @@ export function EventDialog({
   }, [users, participantFilter]);
 
   function update<K extends keyof EventDraft>(key: K, value: EventDraft[K]) {
+    setConflicts(null);
+    setConflictTotal(0);
+    setConflictScope(null);
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function clearConflicts() {
+    setConflicts(null);
+    setConflictTotal(0);
+    setConflictScope(null);
+  }
+
+  function formatConflict(conflict: EventConflict): string {
+    if (conflict.allDay) {
+      return new Intl.DateTimeFormat(locale, {
+        weekday: 'short',
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        timeZone: 'UTC'
+      }).format(new Date(`${conflict.start.slice(0, 10)}T00:00:00Z`));
+    }
+    return new Intl.DateTimeFormat(locale, {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(new Date(conflict.start));
   }
 
   function validate(): string | null {
@@ -149,7 +182,7 @@ export function EventDialog({
     };
   }
 
-  async function doSave(scope: 'series' | 'occurrence') {
+  async function doSave(scope: 'series' | 'occurrence', force = false) {
     const issue = validate();
     if (issue) {
       setError(issue);
@@ -157,9 +190,10 @@ export function EventDialog({
     }
     setBusy(true);
     setError(null);
+    if (!force) clearConflicts();
     try {
       if (mode === 'create') {
-        await apiPost('/events', payload());
+        await apiPost('/events', force ? { ...payload(), force: true } : payload());
         onSaved(t('calendar.eventCreated'));
       } else if (occurrence) {
         const body: Record<string, unknown> = payload();
@@ -169,13 +203,22 @@ export function EventDialog({
         } else {
           body.scope = 'series';
         }
+        if (force) body.force = true;
         await apiPatch(`/events/${occurrence.eventId}`, body);
         onSaved(t('calendar.eventUpdated'));
       }
     } catch (err) {
-      setError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
       setBusy(false);
       setPending(null);
+      if (err instanceof ApiError && err.code === 'event_conflict') {
+        const details = err.details as EventConflictDetails | undefined;
+        setConflicts(details?.conflicts ?? []);
+        setConflictTotal(details?.total ?? details?.conflicts?.length ?? 0);
+        setConflictScope(scope);
+        setError(null);
+        return;
+      }
+      setError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
     }
   }
 
@@ -273,6 +316,47 @@ export function EventDialog({
                 </div>
               </div>
             )}
+            {conflicts && (
+              <div className="conflict-panel">
+                <p>
+                  {mode === 'create' ? t('event.conflictQuestion') : t('event.conflictSaveQuestion')}
+                </p>
+                <ul className="conflict-list">
+                  {conflicts.map((conflict) => (
+                    <li key={`${conflict.eventId}:${conflict.occurrenceStart}`}>
+                      <strong>{conflict.title}</strong>
+                      <span>{formatConflict(conflict)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {conflictTotal > conflicts.length && (
+                  <p className="muted">
+                    {t('event.moreConflicts').replace(
+                      '{count}',
+                      String(conflictTotal - conflicts.length)
+                    )}
+                  </p>
+                )}
+                <div className="scope-actions">
+                  <button
+                    type="button"
+                    className="button primary"
+                    disabled={busy}
+                    onClick={() => void doSave(conflictScope ?? 'series', true)}
+                  >
+                    {mode === 'create' ? t('event.addAnyway') : t('event.saveAnyway')}
+                  </button>
+                  <button
+                    type="button"
+                    className="button"
+                    disabled={busy}
+                    onClick={clearConflicts}
+                  >
+                    {t('event.modify')}
+                  </button>
+                </div>
+              </div>
+            )}
             <div className="form-grid">
               <label className="span-2">
                 <span>{t('event.title')}</span>
@@ -290,6 +374,7 @@ export function EventDialog({
                   value={form.calendarId}
                   onChange={(event) => {
                     const nextId = event.target.value;
+                    clearConflicts();
                     setForm((current) => {
                       const previous = calendars.find((calendar) => calendar.id === current.calendarId);
                       const next = calendars.find((calendar) => calendar.id === nextId);

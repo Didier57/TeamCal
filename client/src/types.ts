@@ -175,6 +175,20 @@ export interface Occurrence {
   deletable: boolean;
 }
 
+export interface EventConflict {
+  eventId: string;
+  occurrenceStart: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+}
+
+export interface EventConflictDetails {
+  conflicts: EventConflict[];
+  total: number;
+}
+
 export interface EventDetail {
   event: Occurrence & { recurrenceUntil?: string | null };
   exceptions: {
@@ -220,4 +234,5 @@ export interface EventPayload {
   categoryId?: string | null;
   participantIds?: string[];
   recurrence?: Recurrence | null;
+  force?: boolean;
 }

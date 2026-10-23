@@ -157,6 +157,16 @@ const fr: Record<string, string> = {
   'event.noEdit': "Vous n'avez pas les droits pour modifier cet événement.",
   'event.descriptionHint': 'Mise en forme simple autorisée selon la configuration.',
   'event.timezoneHint': 'Fuseau horaire',
+  'event.conflictQuestion':
+    "Un autre événement est déjà prévu sur ce créneau. Voulez-vous quand même l'ajouter ou le modifier ?",
+  'event.conflictSaveQuestion':
+    'Un autre événement est déjà prévu sur ce créneau. Voulez-vous quand même enregistrer ou modifier ?',
+  'event.addAnyway': 'Ajouter quand même',
+  'event.saveAnyway': 'Enregistrer quand même',
+  'event.modify': 'Modifier',
+  'event.moreConflicts': '+ {count} autre(s) collision(s)',
+  'calendar.moveConflict':
+    'Ce déplacement entre en collision avec {count} événement(s). Voulez-vous quand même le déplacer ?',
   'recurrence.none': 'Aucune répétition',
   'recurrence.daily': 'Quotidienne',
   'recurrence.weekly': 'Hebdomadaire',
@@ -496,6 +506,16 @@ const en: Record<string, string> = {
   'event.noEdit': 'You are not allowed to edit this event.',
   'event.descriptionHint': 'Simple formatting allowed depending on configuration.',
   'event.timezoneHint': 'Time zone',
+  'event.conflictQuestion':
+    'Another event already occupies this time. Do you still want to add it, or edit it?',
+  'event.conflictSaveQuestion':
+    'Another event already occupies this time. Do you still want to save it, or edit it?',
+  'event.addAnyway': 'Add anyway',
+  'event.saveAnyway': 'Save anyway',
+  'event.modify': 'Edit',
+  'event.moreConflicts': '+ {count} more conflict(s)',
+  'calendar.moveConflict':
+    'This move conflicts with {count} event(s). Move it anyway?',
   'recurrence.none': 'No repetition',
   'recurrence.daily': 'Daily',
   'recurrence.weekly': 'Weekly',
@@ -835,6 +855,16 @@ const de: Record<string, string> = {
   'event.noEdit': 'Sie dürfen diesen Termin nicht bearbeiten.',
   'event.descriptionHint': 'Einfache Formatierung je nach Konfiguration erlaubt.',
   'event.timezoneHint': 'Zeitzone',
+  'event.conflictQuestion':
+    'Ein anderer Termin belegt bereits diese Zeit. Möchten Sie ihn trotzdem hinzufügen oder bearbeiten?',
+  'event.conflictSaveQuestion':
+    'Ein anderer Termin belegt bereits diese Zeit. Möchten Sie ihn trotzdem speichern oder bearbeiten?',
+  'event.addAnyway': 'Trotzdem hinzufügen',
+  'event.saveAnyway': 'Trotzdem speichern',
+  'event.modify': 'Bearbeiten',
+  'event.moreConflicts': '+ {count} weitere Kollision(en)',
+  'calendar.moveConflict':
+    'Diese Verschiebung kollidiert mit {count} Termin(en). Trotzdem verschieben?',
   'recurrence.none': 'Keine Wiederholung',
   'recurrence.daily': 'Täglich',
   'recurrence.weekly': 'Wöchentlich',

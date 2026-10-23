@@ -11,6 +11,7 @@ import {
 } from '../lib/permissions';
 import { notifyEvent } from '../lib/mailer';
 import { cleanDescription, isValidHttpUrl } from '../lib/sanitize';
+import { findEventConflicts } from '../lib/conflicts';
 import {
   eventOccurrenceId,
   expandEvent,
@@ -45,7 +46,8 @@ const eventSchema = z.object({
   visibility: z.string().max(30).optional(),
   categoryId: z.string().nullable().optional(),
   participantIds: z.array(z.string()).max(200).optional().default([]),
-  recurrence: recurrenceSchema.nullable().optional()
+  recurrence: recurrenceSchema.nullable().optional(),
+  force: z.boolean().optional()
 });
 
 const updateSchema = eventSchema.partial().extend({
@@ -102,6 +104,15 @@ function validateEventInput(
     location: body.location ?? null,
     url: body.url ?? null
   };
+}
+
+function ensureNoConflicts(db: any, event: EventRow, excludeEventId?: string) {
+  const result = findEventConflicts(db, event, excludeEventId);
+  if (result.total === 0) return;
+  throw new HttpError(409, 'event_conflict', undefined, {
+    conflicts: result.conflicts,
+    total: result.total
+  });
 }
 
 function replaceParticipants(db: any, eventId: string, participantIds: string[]) {
@@ -316,6 +327,32 @@ export function eventRoutes(): Router {
         ? 'UTC'
         : body.timezone || req.user!.timezone || settings.defaultTimezone;
       const ownerId = calendar.owner_id;
+      if (!body.force) {
+        ensureNoConflicts(req.db, {
+          id,
+          uid: `${id}@teamcal`,
+          calendar_id: calendar.id,
+          owner_id: ownerId,
+          created_by: req.user!.id,
+          title: body.title,
+          description: validated.description,
+          start_at: validated.start,
+          end_at: validated.end,
+          all_day: body.allDay ? 1 : 0,
+          timezone,
+          location: validated.location,
+          url: validated.url,
+          priority: body.priority ?? null,
+          visibility: body.visibility ?? 'default',
+          category_id: body.categoryId ?? null,
+          rrule: rule.rrule,
+          recurrence_until: rule.until,
+          sequence: 0,
+          status: 'confirmed',
+          created_at: now,
+          updated_at: now
+        });
+      }
       req.db.transaction(() => {
         req.db
           .prepare(
@@ -420,6 +457,43 @@ export function eventRoutes(): Router {
         if (body.visibility !== undefined) override.visibility = body.visibility;
         if (body.categoryId !== undefined) override.categoryId = body.categoryId;
         if (body.allDay !== undefined) override.allDay = body.allDay;
+        if (
+          !body.force &&
+          (body.start !== undefined || body.end !== undefined || body.allDay !== undefined)
+        ) {
+          const eventExceptions = req.db
+            .prepare('SELECT * FROM event_exceptions WHERE event_id = ?')
+            .all(event.id) as ExceptionRow[];
+          const around = new Date(occurrenceStart);
+          const occurrence = expandEvent(
+            event,
+            eventExceptions,
+            around,
+            new Date(around.getTime() + 60000),
+            10
+          ).find((entry) => entry.occurrenceStart === occurrenceStart);
+          ensureNoConflicts(
+            req.db,
+            {
+              ...event,
+              start_at: String(override.start ?? occurrence?.start ?? event.start_at),
+              end_at: String(override.end ?? occurrence?.end ?? event.end_at),
+              all_day:
+                override.allDay !== undefined
+                  ? override.allDay
+                    ? 1
+                    : 0
+                  : occurrence
+                    ? occurrence.allDay
+                      ? 1
+                      : 0
+                    : event.all_day,
+              rrule: null,
+              recurrence_until: null
+            },
+            event.id
+          );
+        }
         req.db.transaction(() => {
           if (existing) {
             req.db
@@ -485,6 +559,30 @@ export function eventRoutes(): Router {
       const timezone = merged.allDay
         ? 'UTC'
         : merged.timezone || settings.defaultTimezone;
+      const timingChanged =
+        validated.start !== event.start_at ||
+        validated.end !== event.end_at ||
+        (merged.allDay ? 1 : 0) !== event.all_day ||
+        merged.calendarId !== event.calendar_id ||
+        rrule !== event.rrule ||
+        (recurrenceUntil ?? null) !== (event.recurrence_until ?? null);
+      if (timingChanged && !body.force) {
+        ensureNoConflicts(
+          req.db,
+          {
+            ...event,
+            calendar_id: merged.calendarId,
+            owner_id: access.calendar.owner_id,
+            start_at: validated.start,
+            end_at: validated.end,
+            all_day: merged.allDay ? 1 : 0,
+            timezone,
+            rrule,
+            recurrence_until: recurrenceUntil
+          },
+          event.id
+        );
+      }
       req.db.transaction(() => {
         req.db
           .prepare(

@@ -890,6 +890,51 @@ label small,
   gap: 8px;
 }
 
+.conflict-panel {
+  border: 1px solid color-mix(in srgb, var(--warning) 45%, var(--color-border));
+  background: color-mix(in srgb, var(--warning) 8%, var(--color-surface));
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.conflict-panel p {
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+
+.conflict-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.conflict-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 13px;
+}
+
+.conflict-list strong {
+  font-weight: 600;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.conflict-list span {
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
 .participant-picker {
   display: flex;
   flex-direction: column;

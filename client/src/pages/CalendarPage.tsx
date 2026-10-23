@@ -5,7 +5,15 @@ import { apiGet, apiPatch, apiPut, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { useI18n } from '../i18n';
 import { formatDate, toDateInput, toDateTimeInput } from '../format';
-import type { Calendar, Category, CustomView, Occurrence, User, ViewKind } from '../types';
+import type {
+  Calendar,
+  Category,
+  CustomView,
+  EventConflictDetails,
+  Occurrence,
+  User,
+  ViewKind
+} from '../types';
 import { EventDialog, draftFromOccurrence, type EventDraft } from '../components/EventDialog';
 import { ViewsDialog } from '../components/ViewsDialog';
 
@@ -283,11 +291,48 @@ export function CalendarPage() {
         delete body.calendarId;
       }
     }
+    const patch = (force = false) =>
+      apiPatch(`/events/${occurrence.eventId}`, force ? { ...body, force: true } : body);
     try {
-      await apiPatch(`/events/${occurrence.eventId}`, body);
+      await patch();
       showFlash(t('calendar.eventUpdated'));
       await loadEvents();
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'event_conflict') {
+        const details = err.details as EventConflictDetails | undefined;
+        const conflicts = details?.conflicts ?? [];
+        const total = details?.total ?? conflicts.length;
+        const lines = conflicts.map((conflict) => {
+          const when = conflict.allDay
+            ? new Intl.DateTimeFormat(locale, {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                timeZone: 'UTC'
+              }).format(new Date(`${conflict.start.slice(0, 10)}T00:00:00Z`))
+            : new Intl.DateTimeFormat(locale, {
+                day: '2-digit',
+                month: 'short',
+                hour: '2-digit',
+                minute: '2-digit'
+              }).format(new Date(conflict.start));
+          return `• ${conflict.title} (${when})`;
+        });
+        const message = `${t('calendar.moveConflict').replace('{count}', String(total))}${
+          lines.length ? `\n\n${lines.join('\n')}` : ''
+        }`;
+        if (!window.confirm(message)) return;
+        try {
+          await patch(true);
+          showFlash(t('calendar.eventUpdated'));
+          await loadEvents();
+        } catch (retryError) {
+          showFlash(
+            retryError instanceof ApiError ? errorMessage(retryError.code) : t('calendar.moveError')
+          );
+        }
+        return;
+      }
       showFlash(err instanceof ApiError ? errorMessage(err.code) : t('calendar.moveError'));
     }
   }

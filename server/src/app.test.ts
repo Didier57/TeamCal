@@ -235,6 +235,90 @@ describe('TeamCal API', () => {
     expect(afterCancel.body).toHaveLength(3);
   });
 
+  it('detects event conflicts and allows an explicit override', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const calendars = await agent.get('/api/calendars');
+    const calendarId = calendars.body[0].id as string;
+
+    const first = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Existing meeting',
+        start: '2026-06-01T10:00:00.000Z',
+        end: '2026-06-01T11:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+    expect(first.status).toBe(201);
+
+    const conflict = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Overlapping meeting',
+        start: '2026-06-01T10:30:00.000Z',
+        end: '2026-06-01T11:30:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+    expect(conflict.status).toBe(409);
+    expect(conflict.body.error).toBe('event_conflict');
+    expect(conflict.body.details.total).toBe(1);
+    expect(conflict.body.details.conflicts[0].title).toBe('Existing meeting');
+
+    const forced = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Overlapping meeting',
+        start: '2026-06-01T10:30:00.000Z',
+        end: '2026-06-01T11:30:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris',
+        force: true
+      });
+    expect(forced.status).toBe(201);
+
+    const renamed = await agent
+      .patch(`/api/events/${forced.body.eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({
+        scope: 'series',
+        title: 'Renamed meeting',
+        start: '2026-06-01T10:30:00.000Z',
+        end: '2026-06-01T11:30:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+    expect(renamed.status).toBe(200);
+
+    const moved = await agent
+      .patch(`/api/events/${forced.body.eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({
+        scope: 'series',
+        start: '2026-06-01T10:15:00.000Z',
+        end: '2026-06-01T11:15:00.000Z'
+      });
+    expect(moved.status).toBe(409);
+    expect(moved.body.details.total).toBe(1);
+
+    const movedAnyway = await agent
+      .patch(`/api/events/${forced.body.eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({
+        scope: 'series',
+        start: '2026-06-01T10:15:00.000Z',
+        end: '2026-06-01T11:15:00.000Z',
+        force: true
+      });
+    expect(movedAnyway.status).toBe(200);
+  });
+
   it('manages manual holidays and keeps adjustments across syncs', async () => {
     const { agent, csrf } = await setupAdmin(app);
     const pref = await agent

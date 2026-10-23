@@ -3,7 +3,8 @@ let csrfToken: string | null = null;
 export class ApiError extends Error {
   constructor(
     public code: string,
-    public status: number
+    public status: number,
+    public details?: unknown
   ) {
     super(code);
   }
@@ -36,11 +37,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     }
   }
   if (!response.ok) {
-    const error =
-      data && typeof data === 'object' && 'error' in data
-        ? String((data as { error: unknown }).error)
-        : `http_${response.status}`;
-    throw new ApiError(error, response.status);
+    const body = data && typeof data === 'object' ? (data as { error?: unknown; details?: unknown }) : null;
+    const error = body && 'error' in body ? String(body.error) : `http_${response.status}`;
+    throw new ApiError(error, response.status, body?.details);
   }
   return data as T;
 }
