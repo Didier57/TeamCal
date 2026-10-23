@@ -20,6 +20,13 @@ const timezones = [
 
 const weekdays = [1, 2, 3, 4, 5, 6, 0];
 
+function newHolidaySourceId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `holiday-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export function SettingsAdmin() {
   const { t, locale, errorMessage } = useI18n();
   const { refresh } = useAuth();
@@ -92,8 +99,8 @@ export function SettingsAdmin() {
   function addHolidaySource() {
     if (!settings) return;
     update('holidaySources', [
-      ...settings.holidaySources,
-      { id: crypto.randomUUID(), country: 'LU', url: '', name: '' }
+      ...(settings.holidaySources ?? []),
+      { id: newHolidaySourceId(), country: 'LU', url: '', name: '' }
     ]);
   }
 
