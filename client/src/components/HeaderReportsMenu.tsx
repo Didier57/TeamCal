@@ -24,6 +24,11 @@ export function HeaderReportsMenu() {
     navigate('/reports/audit');
   }
 
+  function openSystem() {
+    setOpen(false);
+    navigate('/reports/system');
+  }
+
   return (
     <div className="toolbar-menu header-reports-menu" ref={menuRef}>
       <button
@@ -38,10 +43,17 @@ export function HeaderReportsMenu() {
         <div className="menu-popover">
           <button
             type="button"
-            className={`menu-item ${active ? 'active' : ''}`}
+            className={`menu-item ${location.pathname === '/reports/audit' ? 'active' : ''}`}
             onClick={openAudit}
           >
             {t('reports.audit')}
+          </button>
+          <button
+            type="button"
+            className={`menu-item ${location.pathname === '/reports/system' ? 'active' : ''}`}
+            onClick={openSystem}
+          >
+            {t('reports.systemLog')}
           </button>
         </div>
       )}

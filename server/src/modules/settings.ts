@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAdmin, requireAuth } from '../lib/auth';
+import { audit } from '../lib/audit';
 import { asyncHandler, HttpError } from '../lib/util';
 import { SettingsStore } from '../settings';
 import { sendTestEmail } from '../lib/mailer';
@@ -143,6 +144,13 @@ export function settingsRoutes(): Router {
         }
       }
       store.set(body as Record<string, unknown>);
+      audit(req.db, {
+        userId: req.user!.id,
+        action: 'settings.updated',
+        entity: 'settings',
+        details: { keys: Object.keys(body) },
+        ip: req.ip
+      });
       const settings = store.get();
       void syncHolidays(req.db, settings).catch(() => undefined);
       res.json({

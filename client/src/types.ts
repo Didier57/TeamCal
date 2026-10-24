@@ -251,6 +251,29 @@ export interface AuditReportResponse {
   entries: AuditReportEntry[];
 }
 
+export interface SystemReportEntry {
+  id: string;
+  action: string;
+  createdAt: string;
+  ip: string | null;
+  actor: {
+    id: string | null;
+    username: string | null;
+    name: string;
+  };
+  target: {
+    id: string | null;
+    label: string;
+    username: string;
+    kind: string;
+  } | null;
+  details: Record<string, string | number | boolean>;
+}
+
+export interface SystemReportResponse {
+  entries: SystemReportEntry[];
+}
+
 export interface EventDetail {
   event: Occurrence & { recurrenceUntil?: string | null };
   exceptions: {

@@ -707,6 +707,79 @@ describe('TeamCal API', () => {
     expect(forbidden.status).toBe(403);
   });
 
+  it('lists system and account activity for administrators', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const created = await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'loguser',
+        email: 'loguser@example.com',
+        firstName: 'Log',
+        lastName: 'User',
+        password: 'Password123!'
+      });
+    expect(created.status).toBe(201);
+    const userId = created.body.id as string;
+
+    const updated = await agent
+      .patch(`/api/users/${userId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ firstName: 'Logged' });
+    expect(updated.status).toBe(200);
+
+    const reset = await agent
+      .post(`/api/users/${userId}/password`)
+      .set('X-CSRF-Token', csrf)
+      .send({ newPassword: 'NewPassword123!' });
+    expect(reset.status).toBe(200);
+
+    const settings = await agent
+      .put('/api/settings')
+      .set('X-CSRF-Token', csrf)
+      .send({ appName: 'TeamCal System Test' });
+    expect(settings.status).toBe(200);
+
+    const failed = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'loguser', password: 'wrong' });
+    expect(failed.status).toBe(401);
+
+    const report = await agent.get('/api/reports/system');
+    expect(report.status).toBe(200);
+    const actions = report.body.entries.map((entry: any) => entry.action);
+    expect(actions).toContain('user.created');
+    expect(actions).toContain('user.updated');
+    expect(actions).toContain('user.password_reset');
+    expect(actions).toContain('settings.updated');
+    expect(actions).toContain('auth.login_failed');
+    expect(actions).not.toContain('event.created');
+
+    const createdRow = report.body.entries.find(
+      (entry: any) => entry.action === 'user.created' && entry.target?.username === 'loguser'
+    );
+    expect(createdRow).toBeTruthy();
+    expect(createdRow.actor.username).toBe('admin');
+    expect(createdRow.target.label).toContain('User');
+
+    const failedRow = report.body.entries.find(
+      (entry: any) => entry.action === 'auth.login_failed'
+    );
+    expect(failedRow).toBeTruthy();
+    expect(failedRow.actor.id).toBeNull();
+    expect(failedRow.target.username).toBe('loguser');
+    expect(failedRow.ip).toBeTruthy();
+    expect(failedRow.details.username).toBe('loguser');
+
+    const userAgent = request.agent(app);
+    const login = await userAgent
+      .post('/api/auth/login')
+      .send({ username: 'loguser', password: 'NewPassword123!' });
+    expect(login.status).toBe(200);
+    const forbidden = await userAgent.get('/api/reports/system');
+    expect(forbidden.status).toBe(403);
+  });
+
   it('prevents non-admins from reading administration settings', async () => {
     const { agent, csrf } = await setupAdmin(app);
     await agent

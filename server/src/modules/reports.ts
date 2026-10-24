@@ -3,8 +3,23 @@ import { requireAdmin, requireAuth } from '../lib/auth';
 import { asyncHandler } from '../lib/util';
 
 const EVENT_ACTIONS = ['event.created', 'event.updated', 'event.deleted'] as const;
+const SYSTEM_ACTIONS = [
+  'auth.login',
+  'auth.login_failed',
+  'auth.logout',
+  'auth.password_changed',
+  'auth.feed_token_regenerated',
+  'user.created',
+  'user.updated',
+  'user.password_reset',
+  'user.disabled',
+  'setup.completed',
+  'settings.updated',
+  'events.imported'
+] as const;
 const DEFAULT_LIMIT = 200;
 const MAX_LIMIT = 500;
+const SENSITIVE_KEY = /password|secret|token|hash/i;
 
 interface AuditRow {
   id: string;
@@ -31,10 +46,31 @@ interface AuditRow {
   owner_last_name: string | null;
 }
 
+interface SystemAuditRow {
+  id: string;
+  action: string;
+  entity: string | null;
+  entity_id: string | null;
+  details: string | null;
+  ip: string | null;
+  created_at: string;
+  actor_id: string | null;
+  actor_username: string | null;
+  actor_first_name: string | null;
+  actor_last_name: string | null;
+}
+
 interface CalendarRow {
   id: string;
   name: string;
   owner_id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+}
+
+interface UserRow {
+  id: string;
   username: string;
   first_name: string;
   last_name: string;
@@ -52,6 +88,71 @@ function parseDetails(value: string | null): Record<string, unknown> {
     return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
+  }
+}
+
+function sanitizeDetails(value: string | null): Record<string, unknown> {
+  const details = parseDetails(value);
+  const safe: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(details)) {
+    if (SENSITIVE_KEY.test(key)) continue;
+    if (typeof item === 'string') safe[key] = item.slice(0, 300);
+    else if (typeof item === 'number' || typeof item === 'boolean') safe[key] = item;
+  }
+  return safe;
+}
+
+function userTarget(user: UserRow) {
+  return {
+    id: user.id,
+    label: displayName(user.first_name, user.last_name, user.username),
+    username: user.username,
+    kind: 'user'
+  };
+}
+
+function systemTarget(
+  row: SystemAuditRow,
+  details: Record<string, unknown>,
+  usersById: Map<string, UserRow>,
+  usersByName: Map<string, UserRow>
+) {
+  const username =
+    typeof details.username === 'string'
+      ? details.username
+      : typeof details.email === 'string'
+        ? details.email
+        : '';
+
+  switch (row.action) {
+    case 'auth.login_failed': {
+      const user =
+        (row.entity_id ? usersById.get(row.entity_id) : undefined) ??
+        usersByName.get(username.toLocaleLowerCase());
+      if (user) return userTarget(user);
+      return username ? { id: null, label: username, username, kind: 'login' } : null;
+    }
+    case 'auth.login':
+    case 'auth.logout':
+    case 'auth.password_changed':
+    case 'auth.feed_token_regenerated':
+    case 'setup.completed': {
+      const user = row.actor_id ? usersById.get(row.actor_id) : undefined;
+      return user ? userTarget(user) : null;
+    }
+    case 'user.created':
+    case 'user.updated':
+    case 'user.password_reset':
+    case 'user.disabled':
+    case 'events.imported': {
+      const user =
+        (row.entity_id ? usersById.get(row.entity_id) : undefined) ??
+        usersByName.get(username.toLocaleLowerCase());
+      if (user) return userTarget(user);
+      return username ? { id: null, label: username, username, kind: 'user' } : null;
+    }
+    default:
+      return null;
   }
 }
 
@@ -159,6 +260,56 @@ export function reportRoutes(): Router {
             deletedAt: row.event_deleted_at,
             available
           }
+        };
+      });
+
+      res.json({ entries });
+    })
+  );
+
+  router.get(
+    '/system',
+    asyncHandler(async (req, res) => {
+      const requested = Number(req.query.limit ?? DEFAULT_LIMIT);
+      const limit = Number.isFinite(requested)
+        ? Math.min(Math.max(Math.trunc(requested), 1), MAX_LIMIT)
+        : DEFAULT_LIMIT;
+
+      const rows = req.db
+        .prepare(
+          `SELECT a.id, a.action, a.entity, a.entity_id, a.details, a.ip, a.created_at,
+                  u.id AS actor_id, u.username AS actor_username,
+                  u.first_name AS actor_first_name, u.last_name AS actor_last_name
+           FROM audit_log a
+           LEFT JOIN users u ON u.id = a.user_id
+           WHERE a.action IN (${SYSTEM_ACTIONS.map(() => '?').join(',')})
+           ORDER BY a.created_at DESC, a.rowid DESC
+           LIMIT ?`
+        )
+        .all(...SYSTEM_ACTIONS, limit) as SystemAuditRow[];
+
+      const users = req.db
+        .prepare('SELECT id, username, first_name, last_name FROM users')
+        .all() as UserRow[];
+      const usersById = new Map(users.map((user) => [user.id, user]));
+      const usersByName = new Map(
+        users.map((user) => [user.username.toLocaleLowerCase(), user])
+      );
+
+      const entries = rows.map((row) => {
+        const details = sanitizeDetails(row.details);
+        return {
+          id: row.id,
+          action: row.action,
+          createdAt: row.created_at,
+          ip: row.ip,
+          actor: {
+            id: row.actor_id,
+            username: row.actor_username,
+            name: displayName(row.actor_first_name, row.actor_last_name, row.actor_username)
+          },
+          target: systemTarget(row, details, usersById, usersByName),
+          details
         };
       });
 
