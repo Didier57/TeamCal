@@ -24,6 +24,27 @@ const timezoneChoices = timezones.includes(browserTimeZone)
   ? timezones
   : [browserTimeZone, ...timezones];
 
+function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = window.atob(base64);
+  const output = new Uint8Array(new ArrayBuffer(raw.length));
+  for (let index = 0; index < raw.length; index += 1) {
+    output[index] = raw.charCodeAt(index);
+  }
+  return output;
+}
+
+async function serviceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
+  const existing = await navigator.serviceWorker.getRegistration();
+  if (existing) return existing;
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 5000))
+  ]);
+}
+
 export function PreferencesPage() {
   const { user, settings, setUser, setTheme, setSettings } = useAuth();
   const { t, errorMessage, setLanguage, locale } = useI18n();
@@ -136,9 +157,44 @@ export function PreferencesPage() {
     }
   }
 
+  async function ensurePushSubscription() {
+    if (
+      typeof window === 'undefined' ||
+      !('serviceWorker' in navigator) ||
+      !('PushManager' in window) ||
+      !settings?.vapidPublicKey
+    ) {
+      return;
+    }
+    const registration = await serviceWorkerRegistration();
+    if (!registration) return;
+    let subscription = await registration.pushManager.getSubscription();
+    if (!subscription) {
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(settings.vapidPublicKey)
+      });
+    }
+    const json = subscription.toJSON();
+    await apiPost('/push/subscribe', {
+      subscription: { endpoint: subscription.endpoint, keys: json.keys }
+    });
+  }
+
+  async function removePushSubscription() {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    const registration = await serviceWorkerRegistration();
+    if (!registration) return;
+    const subscription = await registration.pushManager.getSubscription();
+    if (!subscription) return;
+    await apiPost('/push/unsubscribe', { endpoint: subscription.endpoint }).catch(() => undefined);
+    await subscription.unsubscribe().catch(() => undefined);
+  }
+
   async function toggleNotifications(checked: boolean) {
     if (!checked) {
       setNotifyNewEvents(false);
+      await removePushSubscription().catch(() => undefined);
       return;
     }
     if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -156,6 +212,7 @@ export function PreferencesPage() {
     }
     setNotificationsBlocked(false);
     setNotifyNewEvents(true);
+    await ensurePushSubscription().catch(() => undefined);
   }
 
   async function saveProfile(event: FormEvent) {
@@ -181,6 +238,11 @@ export function PreferencesPage() {
       setUser(response.user);
       setLanguage(language);
       if (theme) setTheme(theme);
+      if (notifyNewEvents) {
+        await ensurePushSubscription().catch(() => undefined);
+      } else {
+        await removePushSubscription().catch(() => undefined);
+      }
       setProfileFlash(t('prefs.profileSaved'));
     } catch (err) {
       setProfileError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));

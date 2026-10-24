@@ -10,6 +10,7 @@ import {
   type EventRow
 } from '../lib/permissions';
 import { notifyEvent } from '../lib/mailer';
+import { sendPushEvent } from '../lib/push';
 import { cleanDescription, isValidHttpUrl } from '../lib/sanitize';
 import { findEventConflicts } from '../lib/conflicts';
 import {
@@ -630,6 +631,9 @@ export function eventRoutes(): Router {
       });
       notifyEvent(req.db, settings, event, 'created').catch((error) =>
         logger.error('notify_failed', { error: error instanceof Error ? error.message : String(error) })
+      );
+      sendPushEvent(req.db, settings, event, req.user!.id).catch((error) =>
+        logger.error('push_failed', { error: error instanceof Error ? error.message : String(error) })
       );
       const participants = (
         req.db.prepare('SELECT user_id FROM event_participants WHERE event_id = ?').all(id) as {

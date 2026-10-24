@@ -70,6 +70,7 @@ export interface PublicSettings {
   priorities: string[];
   visibilityOptions: string[];
   theme: { light: ThemeColors; dark: ThemeColors };
+  vapidPublicKey?: string;
   setupCompleted: boolean;
 }
 

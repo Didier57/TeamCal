@@ -6,6 +6,12 @@ import { I18nProvider } from './i18n';
 import { AuthProvider } from './app-context';
 import './styles.css';
 
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  });
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>

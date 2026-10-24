@@ -19,6 +19,7 @@ import { holidayRoutes } from './modules/holidays';
 import { importRoutes } from './modules/import';
 import { exportRoutes } from './modules/export';
 import { reportRoutes } from './modules/reports';
+import { pushRoutes } from './modules/push';
 import { backupRoutes } from './modules/backups';
 
 export interface AppOptions {
@@ -71,6 +72,7 @@ export function createApp(db: DB, options: AppOptions = {}) {
   app.use('/api/import', importRoutes());
   app.use('/api/export', exportRoutes());
   app.use('/api/reports', reportRoutes());
+  app.use('/api/push', pushRoutes());
   app.use('/api/backups', backupRoutes());
   app.use('/api', notFound);
 

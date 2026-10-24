@@ -1,4 +1,5 @@
 import type { DB } from './db';
+import { getVapidPublicKey } from './lib/push';
 
 export type Language = 'fr' | 'en' | 'de';
 
@@ -231,6 +232,7 @@ export class SettingsStore {
       priorities: s.priorities,
       visibilityOptions: s.visibilityOptions,
       theme: s.theme,
+      vapidPublicKey: getVapidPublicKey(this.db),
       setupCompleted: s.setupCompleted
     };
   }

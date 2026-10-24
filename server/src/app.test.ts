@@ -1382,6 +1382,38 @@ describe('TeamCal API', () => {
     expect(shared.body.user.defaultView).toBe(`view:${viewId}`);
   });
 
+  it('exposes the VAPID key and stores push subscriptions', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const settings = await agent.get('/api/settings/public');
+    expect(settings.status).toBe(200);
+    expect(typeof settings.body.vapidPublicKey).toBe('string');
+    expect(settings.body.vapidPublicKey.length).toBeGreaterThan(20);
+
+    const endpoint = 'https://push.example.test/sub/1';
+    const subscribed = await agent
+      .post('/api/push/subscribe')
+      .set('X-CSRF-Token', csrf)
+      .send({ subscription: { endpoint, keys: { p256dh: 'p256dh-value', auth: 'auth-value' } } });
+    expect(subscribed.status).toBe(200);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM push_subscriptions').get()).toEqual({ count: 1 });
+
+    const updated = await agent
+      .post('/api/push/subscribe')
+      .set('X-CSRF-Token', csrf)
+      .send({ subscription: { endpoint, keys: { p256dh: 'p256dh-updated', auth: 'auth-updated' } } });
+    expect(updated.status).toBe(200);
+    expect(db.prepare('SELECT p256dh FROM push_subscriptions WHERE endpoint = ?').get(endpoint)).toEqual({
+      p256dh: 'p256dh-updated'
+    });
+
+    const unsubscribed = await agent
+      .post('/api/push/unsubscribe')
+      .set('X-CSRF-Token', csrf)
+      .send({ endpoint });
+    expect(unsubscribed.status).toBe(200);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM push_subscriptions').get()).toEqual({ count: 0 });
+  });
+
   it('exports and restores the database while keeping the backup password', async () => {
     const { agent: admin, csrf } = await setupAdmin(app);
     const calendars = await admin.get('/api/calendars');

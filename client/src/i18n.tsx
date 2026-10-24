@@ -451,9 +451,9 @@ const fr: Record<string, string> = {
   'prefs.confirmPassword': 'Confirmer le mot de passe',
   'prefs.mismatch': 'Les mots de passe ne correspondent pas.',
   'prefs.theme': 'Thème personnel',
-  'prefs.notifications': 'Notifications Windows pour les nouveaux événements',
+  'prefs.notifications': 'Notifications pour les nouveaux événements',
   'prefs.notificationsHint':
-    'Une notification s’affiche lorsqu’un autre utilisateur ajoute un événement dans les calendriers affichés.',
+    'Sur ordinateur, une notification s’affiche lorsque quelqu’un ajoute un événement dans vos calendriers. Sur mobile, installez l’application puis activez cette option pour recevoir les notifications push, même application fermée.',
   'prefs.notificationsBlocked':
     'Les notifications sont bloquées par le navigateur. Autorisez-les dans les paramètres du site.',
   'prefs.useGlobal': 'Utiliser le thème global',
@@ -996,9 +996,9 @@ const en: Record<string, string> = {
   'prefs.confirmPassword': 'Confirm password',
   'prefs.mismatch': 'Passwords do not match.',
   'prefs.theme': 'Personal theme',
-  'prefs.notifications': 'Windows notifications for new events',
+  'prefs.notifications': 'Notifications for new events',
   'prefs.notificationsHint':
-    'A notification appears when another user adds an event in the displayed calendars.',
+    'On desktop, a notification appears when someone adds an event to your calendars. On mobile, install the app and enable this option to receive push notifications even when the app is closed.',
   'prefs.notificationsBlocked':
     'Notifications are blocked by the browser. Allow them in the site settings.',
   'prefs.useGlobal': 'Use global theme',
@@ -1542,9 +1542,9 @@ const de: Record<string, string> = {
   'prefs.confirmPassword': 'Passwort bestätigen',
   'prefs.mismatch': 'Die Passwörter stimmen nicht überein.',
   'prefs.theme': 'Persönliches Design',
-  'prefs.notifications': 'Windows-Benachrichtigungen für neue Termine',
+  'prefs.notifications': 'Benachrichtigungen für neue Termine',
   'prefs.notificationsHint':
-    'Eine Benachrichtigung erscheint, wenn ein anderer Benutzer einen Termin in den angezeigten Kalendern hinzufügt.',
+    'Am Computer erscheint eine Benachrichtigung, wenn jemand einen Termin in Ihren Kalendern hinzufügt. Installieren Sie die App auf dem Smartphone und aktivieren Sie diese Option, um Push-Benachrichtigungen auch bei geschlossener App zu erhalten.',
   'prefs.notificationsBlocked':
     'Benachrichtigungen sind vom Browser blockiert. Erlauben Sie sie in den Website-Einstellungen.',
   'prefs.useGlobal': 'Globales Design verwenden',
