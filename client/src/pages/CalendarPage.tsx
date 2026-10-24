@@ -56,6 +56,37 @@ function rangeFor(date: Date, view: ViewKind, firstDay: number): { start: Date; 
   return { start: addDays(first, -7), end: addDays(addMonths(first, 1), 7) };
 }
 
+function parseViewParam(value: string | null, fallback: ViewKind): ViewKind {
+  return value === 'day' || value === 'week' || value === 'month' ? value : fallback;
+}
+
+function parseDateParam(value: string | null): Date {
+  if (value) {
+    const [year, month, day] = value.split('-').map(Number);
+    if (year && month && day) {
+      const parsed = new Date(year, month - 1, day, 12);
+      if (
+        parsed.getFullYear() === year &&
+        parsed.getMonth() === month - 1 &&
+        parsed.getDate() === day
+      ) {
+        return parsed;
+      }
+    }
+  }
+  return new Date();
+}
+
+function localDateKey(date: Date): string {
+  return (
+    date.getFullYear().toString().padStart(4, '0') +
+    '-' +
+    (date.getMonth() + 1).toString().padStart(2, '0') +
+    '-' +
+    date.getDate().toString().padStart(2, '0')
+  );
+}
+
 export function CalendarPage() {
   const { user, settings, refresh } = useAuth();
   const { t, locale, errorMessage } = useI18n();
@@ -65,12 +96,16 @@ export function CalendarPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [views, setViews] = useState<CustomView[]>([]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [view, setView] = useState<ViewKind>(
-    user?.defaultView === 'day' || user?.defaultView === 'week' || user?.defaultView === 'month'
-      ? user.defaultView
-      : 'week'
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [view, setView] = useState<ViewKind>(() =>
+    parseViewParam(
+      searchParams.get('kind'),
+      user?.defaultView === 'day' || user?.defaultView === 'week' || user?.defaultView === 'month'
+        ? user.defaultView
+        : 'week'
+    )
   );
-  const [date, setDate] = useState<Date>(new Date());
+  const [date, setDate] = useState<Date>(() => parseDateParam(searchParams.get('date')));
   const [events, setEvents] = useState<Occurrence[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,17 +113,36 @@ export function CalendarPage() {
   const [timezoneNoticeDismissed, setTimezoneNoticeDismissed] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [viewsOpen, setViewsOpen] = useState(false);
-  const [searchParams, setSearchParams] = useSearchParams();
   const flashTimer = useRef<number | null>(null);
 
   const requestedViewId = searchParams.get('view');
 
+  const currentDateKey = localDateKey(date);
+
+  useEffect(() => {
+    if (searchParams.get('kind') === view && searchParams.get('date') === currentDateKey) return;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set('kind', view);
+        next.set('date', currentDateKey);
+        return next;
+      },
+      { replace: true }
+    );
+  }, [view, currentDateKey, searchParams, setSearchParams]);
+
   useEffect(() => {
     if (searchParams.get('manageViews') !== '1') return;
     setViewsOpen(true);
-    const next = new URLSearchParams(searchParams);
-    next.delete('manageViews');
-    setSearchParams(next, { replace: true });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('manageViews');
+        return next;
+      },
+      { replace: true }
+    );
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -196,9 +250,14 @@ export function CalendarPage() {
       0
     );
     openCreate(writableCalendar.id, start, new Date(start.getTime() + 3600000), false);
-    const next = new URLSearchParams(searchParams);
-    next.delete('newEvent');
-    setSearchParams(next, { replace: true });
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('newEvent');
+        return next;
+      },
+      { replace: true }
+    );
   }, [searchParams, setSearchParams, writableCalendar]);
 
   function shiftDate(direction: number) {

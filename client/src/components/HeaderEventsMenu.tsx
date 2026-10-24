@@ -24,6 +24,13 @@ export function HeaderEventsMenu() {
     navigate(path);
   }
 
+  function addEvent() {
+    setOpen(false);
+    const params = new URLSearchParams(location.pathname === '/' ? location.search : '');
+    params.set('newEvent', '1');
+    navigate({ pathname: '/', search: params.toString() });
+  }
+
   return (
     <div className="toolbar-menu header-events-menu" ref={menuRef}>
       <button
@@ -39,7 +46,7 @@ export function HeaderEventsMenu() {
           <button
             type="button"
             className="menu-item"
-            onClick={() => go('/?newEvent=1')}
+            onClick={addEvent}
           >
             {t('eventsMenu.add')}
           </button>

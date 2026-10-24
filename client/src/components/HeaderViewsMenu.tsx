@@ -42,19 +42,25 @@ export function HeaderViewsMenu() {
     }
   }
 
+  function calendarSearch(updates: Record<string, string>): string {
+    const params = new URLSearchParams(location.pathname === '/' ? location.search : '');
+    for (const [key, value] of Object.entries(updates)) params.set(key, value);
+    return params.toString();
+  }
+
   function showAllResources() {
     setOpen(false);
-    navigate('/?view=all');
+    navigate({ pathname: '/', search: calendarSearch({ view: 'all' }) });
   }
 
   function applyView(customView: CustomView) {
     setOpen(false);
-    navigate(`/?view=${customView.id}`);
+    navigate({ pathname: '/', search: calendarSearch({ view: customView.id }) });
   }
 
   function manageViews() {
     setOpen(false);
-    navigate('/?manageViews=1');
+    navigate({ pathname: '/', search: calendarSearch({ manageViews: '1' }) });
   }
 
   return (

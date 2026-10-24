@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useI18n } from '../i18n';
 import { UsersAdmin } from '../components/admin/UsersAdmin';
 import { SettingsAdmin } from '../components/admin/SettingsAdmin';
@@ -21,9 +21,34 @@ type Tab =
   | 'holidays'
   | 'backup';
 
+const TAB_IDS: Tab[] = [
+  'users',
+  'import',
+  'settings',
+  'categories',
+  'permissions',
+  'smtp',
+  'appearance',
+  'holidays',
+  'backup'
+];
+
 export function AdminPage() {
   const { t } = useI18n();
-  const [tab, setTab] = useState<Tab>('users');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const tab: Tab = TAB_IDS.includes(requestedTab as Tab) ? (requestedTab as Tab) : 'users';
+
+  function selectTab(next: Tab) {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        params.set('tab', next);
+        return params;
+      },
+      { replace: true }
+    );
+  }
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'users', label: t('admin.users') },
@@ -50,7 +75,7 @@ export function AdminPage() {
             role="tab"
             aria-selected={tab === item.id}
             className={`tab ${tab === item.id ? 'active' : ''}`}
-            onClick={() => setTab(item.id)}
+            onClick={() => selectTab(item.id)}
           >
             {item.label}
           </button>
