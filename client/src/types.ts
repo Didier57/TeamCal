@@ -310,14 +310,30 @@ export interface SystemReportResponse {
   entries: SystemReportEntry[];
 }
 
+export interface EventHistoryEntry {
+  id: string;
+  action: 'created' | 'updated' | 'deleted';
+  createdAt: string;
+  actorName: string;
+  fields: string[];
+  scope: string | null;
+}
+
 export interface EventDetail {
-  event: Occurrence & { recurrenceUntil?: string | null };
+  event: Occurrence & {
+    recurrenceUntil?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+    createdByName?: string;
+    updatedByName?: string;
+  };
   exceptions: {
     id: string;
     occurrence_start: string;
     action: string;
     override_json: string | null;
   }[];
+  history?: EventHistoryEntry[];
   editable: boolean;
   deletable: boolean;
 }

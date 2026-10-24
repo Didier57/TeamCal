@@ -893,6 +893,45 @@ describe('TeamCal API', () => {
     expect(afterReimport.body).toHaveLength(3);
   });
 
+  it('shows event creation and update history in event details', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const calendars = await agent.get('/api/calendars');
+    const calendarId = calendars.body[0].id as string;
+
+    const created = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'History event',
+        start: '2026-05-04T09:00:00.000Z',
+        end: '2026-05-04T10:00:00.000Z',
+        timezone: 'Europe/Paris'
+      });
+    expect(created.status).toBe(201);
+    const eventId = created.body.eventId as string;
+
+    const initial = await agent.get(`/api/events/${eventId}`);
+    expect(initial.status).toBe(200);
+    expect(initial.body.event.createdAt).toBeTruthy();
+    expect(initial.body.event.createdByName).toBe('Ada Admin');
+    expect(initial.body.history[0].action).toBe('created');
+    expect(initial.body.history[0].actorName).toBe('Ada Admin');
+
+    const patched = await agent
+      .patch(`/api/events/${eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ title: 'Renamed history', scope: 'series' });
+    expect(patched.status).toBe(200);
+
+    const updated = await agent.get(`/api/events/${eventId}`);
+    expect(updated.body.event.updatedByName).toBe('Ada Admin');
+    expect(updated.body.history[0].action).toBe('updated');
+    expect(updated.body.history[0].scope).toBe('series');
+    expect(updated.body.history[0].fields).toContain('title');
+    expect(updated.body.history[0].fields).not.toContain('location');
+  });
+
   it('keeps deleted events for the audit log', async () => {
     const { agent, csrf } = await setupAdmin(app);
     const calendars = await agent.get('/api/calendars');

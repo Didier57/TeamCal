@@ -14,6 +14,7 @@ import type {
   User
 } from '../types';
 import { parseRrule } from '../recurrence-utils';
+import { EventHistory } from './EventHistory';
 import { RecurrenceEditor } from './RecurrenceEditor';
 import { RichTextEditor } from './RichTextEditor';
 
@@ -575,6 +576,11 @@ export function EventDialog({
                     onChange={(value) => update('recurrence', value)}
                     startDate={form.startInput.slice(0, 10)}
                   />
+                </div>
+              )}
+              {mode === 'edit' && occurrence && (
+                <div className="span-2">
+                  <EventHistory eventId={occurrence.eventId} />
                 </div>
               )}
             </div>

@@ -938,6 +938,49 @@ label small,
   overflow-wrap: anywhere;
 }
 
+.event-history {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.event-history h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.event-history-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-history-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+}
+
+.event-history-date {
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.event-history-actor {
+  font-weight: 600;
+}
+
+.event-history-fields {
+  color: var(--color-muted);
+}
+
 .event-view h3 {
   margin: 0;
   font-size: 14px;

@@ -4,6 +4,7 @@ import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { formatDate } from '../format';
 import { useI18n } from '../i18n';
 import type { EventDetail } from '../types';
+import { EventHistory } from './EventHistory';
 
 interface Props {
   eventId: string;
@@ -150,6 +151,7 @@ export function EventReadonlyDialog({
                   </div>
                 )}
               </dl>
+              <EventHistory eventId={event.eventId} detail={detail} />
               <h3>{t('event.description')}</h3>
               {event.description ? (
                 settings?.allowHtmlDescription ? (

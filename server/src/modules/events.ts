@@ -157,8 +157,126 @@ function eventToApi(
     status: event.status,
     deletedAt: event.deleted_at ?? null,
     deletedBy: event.deleted_by ?? null,
-    participantIds: participants
+    participantIds: participants,
+    createdAt: event.created_at,
+    updatedAt: event.updated_at
   };
+}
+
+function displayName(first: string | null, last: string | null, username: string | null): string {
+  const full = `${first ?? ''} ${last ?? ''}`.trim();
+  return full || username || '';
+}
+
+function userDisplayName(db: any, userId: string | null | undefined): string {
+  if (!userId) return '';
+  const row = db
+    .prepare('SELECT username, first_name, last_name FROM users WHERE id = ?')
+    .get(userId) as { username: string; first_name: string; last_name: string } | undefined;
+  return row ? displayName(row.first_name, row.last_name, row.username) : '';
+}
+
+function parseDetails(value: string | null): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+const HISTORY_LIMIT = 50;
+
+function eventHistory(db: any, eventId: string) {
+  const rows = db
+    .prepare(
+      `SELECT a.id, a.action, a.details, a.created_at,
+              u.username, u.first_name, u.last_name
+       FROM audit_log a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE a.entity = 'event' AND a.entity_id = ?
+       ORDER BY a.created_at DESC, a.rowid DESC
+       LIMIT ?`
+    )
+    .all(eventId, HISTORY_LIMIT) as {
+    id: string;
+    action: string;
+    details: string | null;
+    created_at: string;
+    username: string | null;
+    first_name: string | null;
+    last_name: string | null;
+  }[];
+  return rows.map((row) => {
+    const details = parseDetails(row.details);
+    const fields = Array.isArray(details.fields)
+      ? details.fields.filter((field): field is string => typeof field === 'string')
+      : [];
+    return {
+      id: row.id,
+      action: row.action.replace('event.', ''),
+      createdAt: row.created_at,
+      actorName: displayName(row.first_name, row.last_name, row.username),
+      fields,
+      scope: typeof details.scope === 'string' ? details.scope : null
+    };
+  });
+}
+
+function changedEventFields(
+  before: EventRow,
+  after: EventRow,
+  participantsBefore: string[],
+  participantsAfter: string[]
+): string[] {
+  const fields: string[] = [];
+  if (before.title !== after.title) fields.push('title');
+  if ((before.description ?? '') !== (after.description ?? '')) fields.push('description');
+  if (before.start_at !== after.start_at) fields.push('start');
+  if (before.end_at !== after.end_at) fields.push('end');
+  if (before.all_day !== after.all_day) fields.push('allDay');
+  if (before.timezone !== after.timezone) fields.push('timezone');
+  if ((before.location ?? '') !== (after.location ?? '')) fields.push('location');
+  if ((before.url ?? '') !== (after.url ?? '')) fields.push('url');
+  if (before.priority !== after.priority) fields.push('priority');
+  if (before.visibility !== after.visibility) fields.push('visibility');
+  if ((before.category_id ?? '') !== (after.category_id ?? '')) fields.push('category');
+  if (
+    (before.rrule ?? '') !== (after.rrule ?? '') ||
+    (before.recurrence_until ?? '') !== (after.recurrence_until ?? '')
+  ) {
+    fields.push('recurrence');
+  }
+  if (before.calendar_id !== after.calendar_id) fields.push('calendar');
+  const beforeParticipants = new Set(participantsBefore);
+  const afterParticipants = new Set(participantsAfter);
+  if (
+    beforeParticipants.size !== afterParticipants.size ||
+    Array.from(afterParticipants).some((id) => !beforeParticipants.has(id))
+  ) {
+    fields.push('participants');
+  }
+  return fields;
+}
+
+const OVERRIDE_FIELD_LABELS: Record<string, string> = {
+  title: 'title',
+  description: 'description',
+  start: 'start',
+  end: 'end',
+  allDay: 'allDay',
+  location: 'location',
+  url: 'url',
+  priority: 'priority',
+  visibility: 'visibility',
+  categoryId: 'category'
+};
+
+function overrideChangedFields(override: Record<string, unknown>): string[] {
+  return Object.keys(override)
+    .map((key) => OVERRIDE_FIELD_LABELS[key])
+    .filter((field): field is string => Boolean(field));
 }
 
 function calendarColor(db: any, calendarId: string): string {
@@ -391,9 +509,17 @@ export function eventRoutes(): Router {
         .prepare('SELECT * FROM event_exceptions WHERE event_id = ?')
         .all(event.id) as ExceptionRow[];
       const deleted = Boolean(event.deleted_at);
+      const history = eventHistory(req.db, event.id);
+      const createdByName = userDisplayName(req.db, event.created_by);
+      const lastUpdate = history.find((entry) => entry.action === 'updated');
       res.json({
-        event: eventToApi(req.db, event, eventOccurrenceId(event.id, event.start_at), participants),
+        event: {
+          ...eventToApi(req.db, event, eventOccurrenceId(event.id, event.start_at), participants),
+          createdByName,
+          updatedByName: lastUpdate?.actorName ?? ''
+        },
         exceptions,
+        history,
         editable: !deleted && canEditEvent(req.db, req.user!, event),
         deletable: !deleted && canDeleteEvent(req.db, req.user!, event)
       });
@@ -619,7 +745,19 @@ export function eventRoutes(): Router {
             title: updated.title,
             calendarId: updated.calendar_id,
             scope: 'occurrence',
-            occurrenceStart
+            occurrenceStart,
+            fields: overrideChangedFields({
+              ...(body.title !== undefined ? { title: body.title } : {}),
+              ...(body.description !== undefined ? { description: body.description } : {}),
+              ...(body.start !== undefined ? { start: body.start } : {}),
+              ...(body.end !== undefined ? { end: body.end } : {}),
+              ...(body.location !== undefined ? { location: body.location } : {}),
+              ...(body.url !== undefined ? { url: body.url } : {}),
+              ...(body.priority !== undefined ? { priority: body.priority } : {}),
+              ...(body.visibility !== undefined ? { visibility: body.visibility } : {}),
+              ...(body.categoryId !== undefined ? { categoryId: body.categoryId } : {}),
+              ...(body.allDay !== undefined ? { allDay: body.allDay } : {})
+            })
           },
           ip: req.ip
         });
@@ -692,6 +830,11 @@ export function eventRoutes(): Router {
           event.id
         );
       }
+      const participantsBefore = (
+        req.db.prepare('SELECT user_id FROM event_participants WHERE event_id = ?').all(event.id) as {
+          user_id: string;
+        }[]
+      ).map((r) => r.user_id);
       req.db.transaction(() => {
         req.db
           .prepare(
@@ -734,7 +877,12 @@ export function eventRoutes(): Router {
         action: 'event.updated',
         entity: 'event',
         entityId: event.id,
-        details: { title: updated.title, calendarId: updated.calendar_id, scope: 'series' },
+        details: {
+          title: updated.title,
+          calendarId: updated.calendar_id,
+          scope: 'series',
+          fields: changedEventFields(event, updated, participantsBefore, participants)
+        },
         ip: req.ip
       });
       notifyEvent(req.db, settings, updated, 'updated').catch(() =>
