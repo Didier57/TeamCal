@@ -1,3 +1,69 @@
+diff --git a/node_modules/v9u-smb2/lib/api/createReadStream.js b/node_modules/v9u-smb2/lib/api/createReadStream.js
+index 1fb46ac..40559c1 100644
+--- a/node_modules/v9u-smb2/lib/api/createReadStream.js
++++ b/node_modules/v9u-smb2/lib/api/createReadStream.js
+@@ -32,12 +32,20 @@ module.exports = function createReadStream(path, options, cb) {
+     }
+ 
+     var close = request.bind(undefined, 'close', file, connection);
++    var closed = false;
++    function closeOnce(done) {
++      if (closed) {
++        return done();
++      }
++      closed = true;
++      close(done);
++    }
+ 
+     var stream = new Readable();
+     stream.fileSize = fileSize;
+     if (shouldClose) {
+       stream._destroy = function(err, cb) {
+-        close(function(err2) {
++        closeOnce(function(err2) {
+           if (err2 != null) {
+             return cb(err2);
+           }
+@@ -53,7 +61,7 @@ module.exports = function createReadStream(path, options, cb) {
+ 
+       if (offset >= end) {
+         return shouldClose
+-          ? close(function() {
++          ? closeOnce(function() {
+               stream.push(null);
+             })
+           : stream.push(null);
+diff --git a/node_modules/v9u-smb2/lib/api/createWriteStream.js b/node_modules/v9u-smb2/lib/api/createWriteStream.js
+index ecef957..7a4b80d 100644
+--- a/node_modules/v9u-smb2/lib/api/createWriteStream.js
++++ b/node_modules/v9u-smb2/lib/api/createWriteStream.js
+@@ -50,16 +50,24 @@ module.exports = function createWriteStream(path, options, cb) {
+ 
+     var stream = new Writable();
+     if (shouldClose) {
++      var closed = false;
+       var close = request.bind(undefined, 'close', file, connection);
++      function closeOnce(done) {
++        if (closed) {
++          return done();
++        }
++        closed = true;
++        close(done);
++      }
+       stream._destroy = function(err, cb) {
+-        close(function(err2) {
++        closeOnce(function(err2) {
+           if (err2 != null) {
+             return cb(err2);
+           }
+           cb(err);
+         });
+       };
+-      stream._final = close;
++      stream._final = closeOnce;
+     }
+     stream._write = function(chunk, encoding, next) {
+       write(
 diff --git a/node_modules/v9u-smb2/lib/messages/session_setup_step2.js b/node_modules/v9u-smb2/lib/messages/session_setup_step2.js
 index 378bb40..c8d4605 100644
 --- a/node_modules/v9u-smb2/lib/messages/session_setup_step2.js
