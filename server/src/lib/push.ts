@@ -134,10 +134,24 @@ function configureVapid(db: DB, settings: AppSettings) {
   webpush.setVapidDetails(subject, keys.publicKey, keys.privateKey);
 }
 
+export type PushAction = 'created' | 'updated' | 'cancelled';
+
+const actionLabels: Record<string, Record<PushAction, string>> = {
+  fr: { created: 'Nouvel événement', updated: 'Événement modifié', cancelled: 'Événement supprimé' },
+  en: { created: 'New event', updated: 'Event updated', cancelled: 'Event cancelled' },
+  de: { created: 'Neuer Termin', updated: 'Termin geändert', cancelled: 'Termin abgesagt' }
+};
+
+function actionLabel(language: string | null, action: PushAction): string {
+  const key = language === 'de' ? 'de' : language === 'en' ? 'en' : 'fr';
+  return actionLabels[key][action];
+}
+
 export async function sendPushEvent(
   db: DB,
   settings: AppSettings,
-  event: EventRow
+  event: EventRow,
+  action: PushAction = 'created'
 ): Promise<void> {
   const recipients = recipientsFor(db, event);
   if (recipients.length === 0) {
@@ -159,7 +173,11 @@ export async function sendPushEvent(
     }
     const payload = JSON.stringify({
       title: event.title,
-      body: formatWhen(event, recipient.timezone || event.timezone || 'UTC', recipient.language),
+      body: `${actionLabel(recipient.language, action)} · ${formatWhen(
+        event,
+        recipient.timezone || event.timezone || 'UTC',
+        recipient.language
+      )}`,
       url,
       icon: '/icon-192.png',
       badge: '/icon-192.png'
@@ -172,6 +190,7 @@ export async function sendPushEvent(
   }
   logger.info('push_event_sent', {
     eventId: event.id,
+    action,
     recipients: recipients.length,
     sent,
     failed,

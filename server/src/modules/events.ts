@@ -768,6 +768,11 @@ export function eventRoutes(): Router {
           ip: req.ip
         });
         notifyEvent(req.db, settings, updated, 'updated').catch(() => undefined);
+        sendPushEvent(req.db, settings, updated, 'updated').catch((error) =>
+          logger.error('push_failed', {
+            error: error instanceof Error ? error.message : String(error)
+          })
+        );
         res.json({ ok: true, scope: 'occurrence', occurrenceStart });
         return;
       }
@@ -894,6 +899,12 @@ export function eventRoutes(): Router {
       notifyEvent(req.db, settings, updated, 'updated').catch(() =>
         logger.error('notify_failed', { eventId: event.id })
       );
+      sendPushEvent(req.db, settings, updated, 'updated').catch((error) =>
+        logger.error('push_failed', {
+          eventId: event.id,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      );
       res.json(eventToApi(req.db, updated, eventOccurrenceId(updated.id, updated.start_at), participants));
     })
   );
@@ -951,6 +962,12 @@ export function eventRoutes(): Router {
           ip: req.ip
         });
         notifyEvent(req.db, settings, updated, 'cancelled').catch(() => undefined);
+        sendPushEvent(req.db, settings, updated, 'cancelled').catch((error) =>
+          logger.error('push_failed', {
+            eventId: event.id,
+            error: error instanceof Error ? error.message : String(error)
+          })
+        );
         res.json({ ok: true, scope: 'occurrence' });
         return;
       }
@@ -986,6 +1003,12 @@ export function eventRoutes(): Router {
       });
       notifyEvent(req.db, settings, cancelled, 'cancelled', participants).catch(() =>
         logger.error('notify_failed', { eventId: event.id })
+      );
+      sendPushEvent(req.db, settings, cancelled, 'cancelled').catch((error) =>
+        logger.error('push_failed', {
+          eventId: event.id,
+          error: error instanceof Error ? error.message : String(error)
+        })
       );
       res.json({ ok: true, scope: 'series' });
     })
