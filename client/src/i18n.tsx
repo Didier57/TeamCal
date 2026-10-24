@@ -380,6 +380,8 @@ const fr: Record<string, string> = {
   'admin.backupErrorIncompatible': 'Cette sauvegarde est incompatible avec cette version.',
   'admin.backupErrorEmpty': 'Le fichier de sauvegarde est vide.',
   'admin.backupErrorSmb': 'La connexion ou opération SMB a échoué.',
+  'admin.backupErrorTimeout':
+    'Le serveur SMB ne répond pas (délai dépassé). Vérifiez l’adresse, le réseau et le port 445.',
   'admin.backupErrorName': 'Nom de sauvegarde invalide.',
   'admin.backupErrorFolder': 'Sous-dossier de sauvegarde invalide.',
   'admin.backupErrorForeign': 'La sauvegarde contient des données incohérentes.',
@@ -854,6 +856,8 @@ const en: Record<string, string> = {
   'admin.backupErrorIncompatible': 'This backup is incompatible with this version.',
   'admin.backupErrorEmpty': 'The backup file is empty.',
   'admin.backupErrorSmb': 'The SMB connection or operation failed.',
+  'admin.backupErrorTimeout':
+    'The SMB server is not responding (timed out). Check the address, network and port 445.',
   'admin.backupErrorName': 'Invalid backup name.',
   'admin.backupErrorFolder': 'Invalid backup subfolder.',
   'admin.backupErrorForeign': 'The backup contains inconsistent data.',
@@ -1329,6 +1333,8 @@ const de: Record<string, string> = {
   'admin.backupErrorIncompatible': 'Diese Sicherung ist mit dieser Version nicht kompatibel.',
   'admin.backupErrorEmpty': 'Die Sicherungsdatei ist leer.',
   'admin.backupErrorSmb': 'Die SMB-Verbindung oder -Operation ist fehlgeschlagen.',
+  'admin.backupErrorTimeout':
+    'Der SMB-Server antwortet nicht (Zeitüberschreitung). Prüfen Sie Adresse, Netzwerk und Port 445.',
   'admin.backupErrorName': 'Ungültiger Sicherungsname.',
   'admin.backupErrorFolder': 'Ungültiger Sicherungsunterordner.',
   'admin.backupErrorForeign': 'Die Sicherung enthält inkonsistente Daten.',
@@ -1442,6 +1448,7 @@ const errorKeys: Record<string, string> = {
   backup_incompatible: 'admin.backupErrorIncompatible',
   backup_empty: 'admin.backupErrorEmpty',
   smb_error: 'admin.backupErrorSmb',
+  smb_timeout: 'admin.backupErrorTimeout',
   invalid_backup_name: 'admin.backupErrorName',
   invalid_backup_folder: 'admin.backupErrorFolder',
   backup_foreign_key_error: 'admin.backupErrorForeign'

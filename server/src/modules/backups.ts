@@ -29,6 +29,7 @@ const CLIENT_ERRORS = new Set([
 function backupHttpError(error: unknown): HttpError {
   const message = error instanceof Error ? error.message : 'smb_error';
   if (message === 'backup_empty') return new HttpError(400, 'backup_empty');
+  if (message === 'smb_timeout') return new HttpError(504, 'smb_timeout');
   if (CLIENT_ERRORS.has(message)) {
     return new HttpError(400, message);
   }

@@ -102,11 +102,21 @@ function createClient(backup: BackupSettings): SMB2 {
   });
 }
 
-async function withClient<T>(backup: BackupSettings, work: (client: SMB2) => Promise<T>): Promise<T> {
+async function withClient<T>(
+  backup: BackupSettings,
+  work: (client: SMB2) => Promise<T>,
+  timeoutMs = 30000
+): Promise<T> {
   const client = createClient(backup);
+  const socket = (client as unknown as { socket?: import('node:net').Socket }).socket;
+  const timer = setTimeout(() => {
+    socket?.destroy(new Error('smb_timeout'));
+  }, timeoutMs);
+  timer.unref();
   try {
     return await work(client);
   } finally {
+    clearTimeout(timer);
     try {
       client.disconnect();
     } catch {
@@ -264,17 +274,21 @@ export async function testSmbConnection(
 ): Promise<{ ok: true; folderExists: boolean }> {
   assertConfigured(backup);
   const folder = normalizeFolder(backup.folder);
-  return withClient(backup, async (client) => {
-    await client.readdir('');
-    const folderExists = folder ? await client.exists(folder) : true;
-    return { ok: true, folderExists };
-  });
+  return withClient(
+    backup,
+    async (client) => {
+      await client.readdir('');
+      const folderExists = folder ? await client.exists(folder) : true;
+      return { ok: true, folderExists };
+    },
+    12000
+  );
 }
 
 export async function listSmbBackups(backup: BackupSettings): Promise<BackupFile[]> {
   assertConfigured(backup);
   const folder = normalizeFolder(backup.folder);
-  return withClient(backup, (client) => readRemoteFiles(client, folder));
+  return withClient(backup, (client) => readRemoteFiles(client, folder), 20000);
 }
 
 async function performBackup(db: DB, settings: AppSettings): Promise<BackupResult> {
@@ -296,7 +310,7 @@ async function performBackup(db: DB, settings: AppSettings): Promise<BackupResul
         await client.unlink(remotePath(folder, file.name));
       }
       return { file: name, size, deleted: extra.map((file) => file.name) };
-    });
+    }, 120000);
   } finally {
     await cleanup(snapshot.dir);
   }
@@ -319,10 +333,14 @@ export function restoreSmbBackup(
     const dir = await tempDir();
     try {
       const local = path.join(dir, 'restore.sqlite');
-      await withClient(backup, async (client) => {
-        const readable = await client.createReadStream(remotePath(folder, name));
-        await pipeline(readable, fs.createWriteStream(local));
-      });
+      await withClient(
+        backup,
+        async (client) => {
+          const readable = await client.createReadStream(remotePath(folder, name));
+          await pipeline(readable, fs.createWriteStream(local));
+        },
+        120000
+      );
       await restoreDatabase(db, local);
     } finally {
       await cleanup(dir);

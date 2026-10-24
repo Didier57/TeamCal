@@ -18,7 +18,8 @@ RUN npm prune --omit=dev
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production \
     PORT=8080 \
-    DATABASE_PATH=/app/data/teamcal.sqlite
+    DATABASE_PATH=/app/data/teamcal.sqlite \
+    NODE_OPTIONS=--openssl-legacy-provider
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gosu \
