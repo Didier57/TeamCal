@@ -181,6 +181,8 @@ export interface Occurrence {
   isException: boolean;
   sequence: number;
   status: string;
+  deletedAt?: string | null;
+  deletedBy?: string | null;
   editable: boolean;
   deletable: boolean;
 }
@@ -215,6 +217,38 @@ export interface EventConflict {
 export interface EventConflictDetails {
   conflicts: EventConflict[];
   total: number;
+}
+
+export interface AuditReportEntry {
+  id: string;
+  action: 'created' | 'updated' | 'deleted';
+  createdAt: string;
+  actor: {
+    id: string | null;
+    username: string | null;
+    name: string;
+  };
+  agenda: {
+    id: string;
+    name: string | null;
+    username: string | null;
+    ownerName: string;
+  } | null;
+  event: {
+    id: string;
+    title: string;
+    start: string | null;
+    end: string | null;
+    allDay: boolean;
+    status: string | null;
+    deleted: boolean;
+    deletedAt: string | null;
+    available: boolean;
+  };
+}
+
+export interface AuditReportResponse {
+  entries: AuditReportEntry[];
 }
 
 export interface EventDetail {

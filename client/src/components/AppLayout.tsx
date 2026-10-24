@@ -3,6 +3,7 @@ import { apiPut } from '../api';
 import { useAuth } from '../app-context';
 import { languageLabel, useI18n } from '../i18n';
 import type { Language, User } from '../types';
+import { HeaderReportsMenu } from './HeaderReportsMenu';
 import { HeaderViewsMenu } from './HeaderViewsMenu';
 
 export function AppLayout() {
@@ -39,6 +40,7 @@ export function AppLayout() {
           <HeaderViewsMenu />
           <NavLink to="/search">{t('nav.search')}</NavLink>
           <NavLink to="/preferences">{t('nav.preferences')}</NavLink>
+          {user.isAdmin && <HeaderReportsMenu />}
           {user.isAdmin && <NavLink to="/admin">{t('nav.admin')}</NavLink>}
         </nav>
         <div className="header-tools">

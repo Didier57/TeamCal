@@ -130,6 +130,7 @@ function eventToApi(
   occurrenceId: string,
   participants: string[]
 ) {
+  const category = categoryInfo(db, event.category_id);
   return {
     id: occurrenceId,
     eventId: event.id,
@@ -145,6 +146,8 @@ function eventToApi(
     priority: event.priority,
     visibility: event.visibility,
     categoryId: event.category_id,
+    categoryName: category.name,
+    categoryColor: category.color,
     calendarId: event.calendar_id,
     ownerId: event.owner_id,
     createdBy: event.created_by,
@@ -152,6 +155,8 @@ function eventToApi(
     recurrenceUntil: event.recurrence_until,
     sequence: event.sequence,
     status: event.status,
+    deletedAt: event.deleted_at ?? null,
+    deletedBy: event.deleted_by ?? null,
     participantIds: participants
   };
 }
@@ -375,11 +380,12 @@ export function eventRoutes(): Router {
       const exceptions = req.db
         .prepare('SELECT * FROM event_exceptions WHERE event_id = ?')
         .all(event.id) as ExceptionRow[];
+      const deleted = Boolean(event.deleted_at);
       res.json({
         event: eventToApi(req.db, event, eventOccurrenceId(event.id, event.start_at), participants),
         exceptions,
-        editable: canEditEvent(req.db, req.user!, event),
-        deletable: canDeleteEvent(req.db, req.user!, event)
+        editable: !deleted && canEditEvent(req.db, req.user!, event),
+        deletable: !deleted && canDeleteEvent(req.db, req.user!, event)
       });
     })
   );
@@ -505,6 +511,7 @@ export function eventRoutes(): Router {
         | EventRow
         | undefined;
       if (!event) throw new HttpError(404, 'event_not_found');
+      if (event.status === 'cancelled' || event.deleted_at) throw new HttpError(409, 'event_deleted');
       if (!canEditEvent(req.db, req.user!, event)) throw new HttpError(403, 'forbidden');
       const settings = new SettingsStore(req.db).get();
       const occurrenceStart = body.occurrenceStart ?? parsed.occurrenceStart;
@@ -593,6 +600,19 @@ export function eventRoutes(): Router {
             .run(nowIso(), event.id);
         })();
         const updated = req.db.prepare('SELECT * FROM events WHERE id = ?').get(event.id) as EventRow;
+        audit(req.db, {
+          userId: req.user!.id,
+          action: 'event.updated',
+          entity: 'event',
+          entityId: event.id,
+          details: {
+            title: updated.title,
+            calendarId: updated.calendar_id,
+            scope: 'occurrence',
+            occurrenceStart
+          },
+          ip: req.ip
+        });
         notifyEvent(req.db, settings, updated, 'updated').catch(() => undefined);
         res.json({ ok: true, scope: 'occurrence', occurrenceStart });
         return;
@@ -704,7 +724,7 @@ export function eventRoutes(): Router {
         action: 'event.updated',
         entity: 'event',
         entityId: event.id,
-        details: { title: updated.title },
+        details: { title: updated.title, calendarId: updated.calendar_id, scope: 'series' },
         ip: req.ip
       });
       notifyEvent(req.db, settings, updated, 'updated').catch(() =>
@@ -722,6 +742,7 @@ export function eventRoutes(): Router {
         | EventRow
         | undefined;
       if (!event) throw new HttpError(404, 'event_not_found');
+      if (event.status === 'cancelled' || event.deleted_at) throw new HttpError(409, 'event_deleted');
       if (!canDeleteEvent(req.db, req.user!, event)) throw new HttpError(403, 'forbidden');
       const settings = new SettingsStore(req.db).get();
       const scope = req.query.scope === 'occurrence' ? 'occurrence' : 'series';
@@ -752,6 +773,19 @@ export function eventRoutes(): Router {
             .run(nowIso(), event.id);
         })();
         const updated = req.db.prepare('SELECT * FROM events WHERE id = ?').get(event.id) as EventRow;
+        audit(req.db, {
+          userId: req.user!.id,
+          action: 'event.deleted',
+          entity: 'event',
+          entityId: event.id,
+          details: {
+            title: updated.title,
+            calendarId: updated.calendar_id,
+            scope: 'occurrence',
+            occurrenceStart
+          },
+          ip: req.ip
+        });
         notifyEvent(req.db, settings, updated, 'cancelled').catch(() => undefined);
         res.json({ ok: true, scope: 'occurrence' });
         return;
@@ -762,16 +796,28 @@ export function eventRoutes(): Router {
           user_id: string;
         }[]
       ).map((r) => r.user_id);
-      const cancelled: EventRow = { ...event, sequence: event.sequence + 1, status: 'cancelled' };
+      const deletedAt = nowIso();
       req.db.transaction(() => {
-        req.db.prepare('DELETE FROM events WHERE id = ?').run(event.id);
+        req.db
+          .prepare(
+            `UPDATE events
+             SET status = 'cancelled', deleted_at = ?, deleted_by = ?, sequence = sequence + 1, updated_at = ?
+             WHERE id = ?`
+          )
+          .run(deletedAt, req.user!.id, deletedAt, event.id);
       })();
+      const cancelled = req.db.prepare('SELECT * FROM events WHERE id = ?').get(event.id) as EventRow;
       audit(req.db, {
         userId: req.user!.id,
         action: 'event.deleted',
         entity: 'event',
         entityId: event.id,
-        details: { title: event.title, participants },
+        details: {
+          title: event.title,
+          calendarId: event.calendar_id,
+          scope: 'series',
+          participants
+        },
         ip: req.ip
       });
       notifyEvent(req.db, settings, cancelled, 'cancelled', participants).catch(() =>

@@ -17,6 +17,7 @@ import { viewRoutes } from './modules/views';
 import { feedRoutes } from './modules/feed';
 import { holidayRoutes } from './modules/holidays';
 import { importRoutes } from './modules/import';
+import { reportRoutes } from './modules/reports';
 
 export interface AppOptions {
   clientDist?: string;
@@ -66,6 +67,7 @@ export function createApp(db: DB, options: AppOptions = {}) {
   app.use('/api/feed', feedRoutes());
   app.use('/api/holidays', holidayRoutes());
   app.use('/api/import', importRoutes());
+  app.use('/api/reports', reportRoutes());
   app.use('/api', notFound);
 
   const clientDist = options.clientDist ?? path.resolve(__dirname, '../../client/dist');

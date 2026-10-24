@@ -5,6 +5,7 @@ import { CalendarPage } from './pages/CalendarPage';
 import { SearchPage } from './pages/SearchPage';
 import { AdminPage } from './pages/AdminPage';
 import { PreferencesPage } from './pages/PreferencesPage';
+import { ReportAuditPage } from './pages/ReportAuditPage';
 import { LoginPage } from './pages/LoginPage';
 import { SetupPage } from './pages/SetupPage';
 
@@ -27,6 +28,10 @@ export function App() {
         <Route path="/" element={<CalendarPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/preferences" element={<PreferencesPage />} />
+        <Route
+          path="/reports/audit"
+          element={user.isAdmin ? <ReportAuditPage /> : <Navigate to="/" replace />}
+        />
         <Route path="/admin" element={user.isAdmin ? <AdminPage /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

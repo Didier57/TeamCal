@@ -638,6 +638,75 @@ describe('TeamCal API', () => {
     expect(participantCount.count).toBe(1);
   });
 
+  it('keeps deleted events for the audit log', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const calendars = await agent.get('/api/calendars');
+    const calendarId = calendars.body[0].id as string;
+
+    const created = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Audit event',
+        start: '2027-08-10T09:00:00.000Z',
+        end: '2027-08-10T10:00:00.000Z',
+        allDay: false
+      });
+    expect(created.status).toBe(201);
+    const eventId = created.body.eventId as string;
+
+    const updated = await agent
+      .patch(`/api/events/${eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ title: 'Renamed audit event', scope: 'series' });
+    expect(updated.status).toBe(200);
+
+    const deleted = await agent
+      .delete(`/api/events/${eventId}`)
+      .set('X-CSRF-Token', csrf);
+    expect(deleted.status).toBe(200);
+
+    const list = await agent.get(
+      '/api/events?start=2027-08-01T00:00:00.000Z&end=2027-08-31T23:59:59.000Z'
+    );
+    expect(list.body.some((event: any) => event.eventId === eventId)).toBe(false);
+
+    const read = await agent.get(`/api/events/${eventId}`);
+    expect(read.status).toBe(200);
+    expect(read.body.event.title).toBe('Renamed audit event');
+    expect(read.body.event.status).toBe('cancelled');
+    expect(read.body.event.deletedAt).toBeTruthy();
+    expect(read.body.editable).toBe(false);
+    expect(read.body.deletable).toBe(false);
+
+    const deleteAgain = await agent
+      .delete(`/api/events/${eventId}`)
+      .set('X-CSRF-Token', csrf);
+    expect(deleteAgain.status).toBe(409);
+    expect(deleteAgain.body.error).toBe('event_deleted');
+
+    const report = await agent.get('/api/reports/audit');
+    expect(report.status).toBe(200);
+    const rows = report.body.entries.filter((entry: any) => entry.event.id === eventId);
+    expect(rows.map((entry: any) => entry.action)).toEqual(['deleted', 'updated', 'created']);
+    expect(rows[0].event.available).toBe(true);
+    expect(rows[0].event.deleted).toBe(true);
+    expect(rows[0].event.title).toBe('Renamed audit event');
+    expect(rows[0].actor.name).toBe('Ada Admin');
+    expect(rows[0].agenda.name).toBeTruthy();
+    expect(rows[0].agenda.username).toBe('admin');
+
+    await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({ username: 'dave', email: 'dave@example.com', password: 'Password123!' });
+    const dave = request.agent(app);
+    await dave.post('/api/auth/login').send({ username: 'dave', password: 'Password123!' });
+    const forbidden = await dave.get('/api/reports/audit');
+    expect(forbidden.status).toBe(403);
+  });
+
   it('prevents non-admins from reading administration settings', async () => {
     const { agent, csrf } = await setupAdmin(app);
     await agent
