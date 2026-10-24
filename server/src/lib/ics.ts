@@ -126,6 +126,7 @@ export interface FeedItem {
   start: string;
   end: string;
   allDay: boolean;
+  categories?: string[];
   sequence?: number;
   stamp?: string | Date;
 }
@@ -156,6 +157,9 @@ export function buildFeedIcs(calendarName: string, items: FeedItem[]): string {
     if (item.description) lines.push(`DESCRIPTION:${escapeText(item.description)}`);
     if (item.location) lines.push(`LOCATION:${escapeText(item.location)}`);
     if (item.url) lines.push(`URL:${item.url}`);
+    if (item.categories?.length) {
+      lines.push(`CATEGORIES:${item.categories.map(escapeText).join(',')}`);
+    }
     lines.push('STATUS:CONFIRMED');
     lines.push(`TRANSP:${item.allDay ? 'TRANSPARENT' : 'OPAQUE'}`);
     lines.push('END:VEVENT');

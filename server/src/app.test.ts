@@ -663,6 +663,12 @@ describe('TeamCal API', () => {
     expect(bobCalendar).toBeTruthy();
     expect(adminCalendar).toBeTruthy();
 
+    const category = await admin
+      .post('/api/categories')
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Export category', color: '#336699' });
+    expect(category.status).toBe(201);
+
     await admin
       .post('/api/events')
       .set('X-CSRF-Token', csrf)
@@ -691,6 +697,7 @@ describe('TeamCal API', () => {
       'DTSTART;TZID=Europe/Paris:20280210T100000',
       'DTEND;TZID=Europe/Paris:20280210T110000',
       'SUMMARY:Bob imported event',
+      'CATEGORIES:Export category',
       'END:VEVENT',
       'END:VCALENDAR'
     ].join('\r\n');
@@ -713,11 +720,13 @@ describe('TeamCal API', () => {
     expect(bobExport.headers['content-type']).toContain('text/calendar');
     expect(bobExport.headers['content-disposition']).toContain('teamcal_bob.ics');
     expect(bobExport.text).toContain('SUMMARY:Bob imported event');
+    expect(bobExport.text).toContain('CATEGORIES:Export category');
     expect(bobExport.text).not.toContain('Admin private export');
 
     const adminExport = await admin.get(`/api/export/ics?userId=${bobId}`);
     expect(adminExport.status).toBe(200);
     expect(adminExport.text).toContain('SUMMARY:Bob imported event');
+    expect(adminExport.text).toContain('CATEGORIES:Export category');
     expect(adminExport.text).not.toContain('Admin private export');
 
     const adminOwn = await admin.get('/api/export/ics');

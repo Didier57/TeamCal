@@ -10,6 +10,10 @@ import { SettingsStore } from '../settings';
 
 const MAX_ITEMS = 50000;
 
+interface ExportEventRow extends EventRow {
+  category_name: string | null;
+}
+
 export function exportRoutes(): Router {
   const router = Router();
 
@@ -29,14 +33,15 @@ export function exportRoutes(): Router {
 
       const events = req.db
         .prepare(
-          `SELECT DISTINCT e.*
+          `SELECT DISTINCT e.*, c.name AS category_name
            FROM events e
            LEFT JOIN event_participants p ON p.event_id = e.id AND p.user_id = ?
+           LEFT JOIN categories c ON c.id = e.category_id
            WHERE e.status <> 'cancelled'
              AND (e.owner_id = ? OR e.created_by = ? OR p.user_id IS NOT NULL)
            ORDER BY e.start_at`
         )
-        .all(user.id, user.id, user.id) as EventRow[];
+        .all(user.id, user.id, user.id) as ExportEventRow[];
 
       const eventIds = events.map((event) => event.id);
       const exceptions: ExceptionRow[] =
@@ -76,6 +81,7 @@ export function exportRoutes(): Router {
             start: occurrence.start,
             end: occurrence.end,
             allDay: occurrence.allDay,
+            categories: event.category_name ? [event.category_name] : undefined,
             sequence: occurrence.sequence,
             stamp: event.updated_at
           });
