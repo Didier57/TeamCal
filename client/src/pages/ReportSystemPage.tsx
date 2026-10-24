@@ -3,7 +3,67 @@ import { apiGet, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { formatDate } from '../format';
 import { useI18n } from '../i18n';
-import type { SystemReportEntry, SystemReportResponse } from '../types';
+import type { SettingChange, SystemReportEntry, SystemReportResponse } from '../types';
+
+const SETTING_LABELS: Record<string, string> = {
+  appName: 'admin.appName',
+  baseUrl: 'admin.baseUrl',
+  defaultLanguage: 'admin.defaultLanguage',
+  defaultTimezone: 'admin.defaultTimezone',
+  dateFormat: 'admin.dateFormat',
+  timeFormat: 'admin.timeFormat',
+  firstDay: 'admin.firstDay',
+  weekendDays: 'admin.weekendDays',
+  workHours: 'admin.workHours',
+  defaultView: 'admin.defaultView',
+  allowHtmlDescription: 'admin.allowHtml',
+  allowUserColors: 'theme.allowUserColors',
+  priorities: 'admin.priorities',
+  visibilityOptions: 'admin.visibilities',
+  holidaySources: 'admin.holidaySourcesTitle',
+  sessionDurationDays: 'admin.sessionDays',
+  'fields.location': 'admin.fieldLocation',
+  'fields.url': 'admin.fieldUrl',
+  'fields.priority': 'admin.fieldPriority',
+  'fields.visibility': 'admin.fieldVisibility',
+  'fields.participants': 'admin.fieldParticipants',
+  'fields.recurrence': 'admin.fieldRecurrence',
+  'smtp.host': 'admin.smtpHost',
+  'smtp.port': 'admin.smtpPort',
+  'smtp.secure': 'admin.smtpSecure',
+  'smtp.user': 'admin.smtpUser',
+  'smtp.password': 'admin.smtpPassword',
+  'smtp.fromName': 'admin.smtpFromName',
+  'smtp.fromEmail': 'admin.smtpFromEmail',
+  'backup.enabled': 'admin.backupEnabled',
+  'backup.host': 'admin.backupHost',
+  'backup.share': 'admin.backupShare',
+  'backup.username': 'admin.backupUsername',
+  'backup.password': 'admin.backupPassword',
+  'backup.domain': 'admin.backupDomain',
+  'backup.folder': 'admin.backupFolder',
+  'backup.day': 'admin.backupDay',
+  'backup.time': 'admin.backupTime',
+  'backup.keep': 'admin.backupKeep'
+};
+
+const THEME_LABELS: Record<string, string> = {
+  background: 'theme.background',
+  documentTitle: 'theme.documentTitle',
+  text: 'theme.documentText',
+  eventText: 'theme.eventText',
+  border: 'theme.gridColor',
+  headerBackground: 'theme.headerBackground',
+  headerText: 'theme.headerText',
+  cellBackground: 'theme.cellBackground',
+  todayBackground: 'theme.todayBackground',
+  eventDayBackground: 'theme.eventDayBackground',
+  weekendBackground: 'theme.weekendBackground',
+  otherMonthBackground: 'theme.otherMonthBackground',
+  weekNumberColor: 'theme.weekNumberColor',
+  eventDetailsBackground: 'theme.eventDetailsBackground',
+  eventDetailsText: 'theme.eventDetailsText'
+};
 
 function numeric(
   details: SystemReportEntry['details'],
@@ -56,6 +116,56 @@ export function ReportSystemPage() {
     return 'other';
   }
 
+  function settingLabel(path: string): string {
+    if (path.startsWith('theme.light.') || path.startsWith('theme.dark.')) {
+      const mode = path.startsWith('theme.light.') ? t('common.light') : t('common.dark');
+      const key = path.slice(path.lastIndexOf('.') + 1);
+      const label = THEME_LABELS[key];
+      return `${mode} · ${label ? t(label) : key}`;
+    }
+    const label = SETTING_LABELS[path];
+    return label ? t(label) : path;
+  }
+
+  function settingValue(value: string | undefined): string {
+    if (value === undefined || value === '') return t('reports.systemDetail.empty');
+    if (value === 'true') return t('common.yes');
+    if (value === 'false') return t('common.no');
+    return value.length > 160 ? `${value.slice(0, 159)}…` : value;
+  }
+
+  function settingChangeLines(entry: SystemReportEntry): string[] {
+    const raw = entry.details.changes;
+    const changes = Array.isArray(raw)
+      ? raw.filter(
+          (change): change is SettingChange =>
+            Boolean(change) &&
+            typeof change === 'object' &&
+            typeof (change as SettingChange).path === 'string'
+        )
+      : [];
+    if (changes.length > 0) {
+      const lines = changes.slice(0, 8).map((change) => {
+        const label = settingLabel(change.path);
+        if (change.secret) {
+          return `${label} : ${t('reports.systemDetail.secretChanged')}`;
+        }
+        return `${label} : ${settingValue(change.before)} → ${settingValue(change.after)}`;
+      });
+      if (changes.length > 8) {
+        lines.push(
+          t('reports.systemDetail.more').replace('{count}', String(changes.length - 8))
+        );
+      }
+      return lines;
+    }
+    const keys = entry.details.keys;
+    if (Array.isArray(keys) && keys.length > 0) {
+      return [`${t('reports.systemDetail.keys')} ${keys.slice(0, 12).join(', ')}`];
+    }
+    return [];
+  }
+
   function detailLines(entry: SystemReportEntry): string[] {
     const lines: string[] = [];
     if (entry.action === 'auth.login_failed') {
@@ -84,6 +194,9 @@ export function ReportSystemPage() {
       if (exceptions !== null) {
         lines.push(`${t('reports.systemDetail.exceptions')} ${exceptions}`);
       }
+    }
+    if (entry.action === 'settings.updated') {
+      lines.push(...settingChangeLines(entry));
     }
     return lines;
   }
@@ -139,8 +252,8 @@ export function ReportSystemPage() {
                         <span className={`system-action-label ${actionGroup(entry.action)}`}>
                           {t(`reports.systemAction.${entry.action}`)}
                         </span>
-                        {lines.map((line) => (
-                          <small key={line} className="system-action-detail">
+                        {lines.map((line, index) => (
+                          <small key={`${entry.id}-${index}`} className="system-action-detail">
                             {line}
                           </small>
                         ))}

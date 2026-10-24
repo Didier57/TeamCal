@@ -91,13 +91,27 @@ function parseDetails(value: string | null): Record<string, unknown> {
   }
 }
 
+function sanitizeValue(value: unknown): unknown {
+  if (typeof value === 'string') return value.slice(0, 300);
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (Array.isArray(value)) return value.slice(0, 100).map(sanitizeValue);
+  if (value && typeof value === 'object') {
+    const safe: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (SENSITIVE_KEY.test(key)) continue;
+      safe[key] = sanitizeValue(item);
+    }
+    return safe;
+  }
+  return null;
+}
+
 function sanitizeDetails(value: string | null): Record<string, unknown> {
   const details = parseDetails(value);
   const safe: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(details)) {
     if (SENSITIVE_KEY.test(key)) continue;
-    if (typeof item === 'string') safe[key] = item.slice(0, 300);
-    else if (typeof item === 'number' || typeof item === 'boolean') safe[key] = item;
+    safe[key] = sanitizeValue(item);
   }
   return safe;
 }

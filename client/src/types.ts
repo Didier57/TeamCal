@@ -296,7 +296,14 @@ export interface SystemReportEntry {
     username: string;
     kind: string;
   } | null;
-  details: Record<string, string | number | boolean>;
+  details: Record<string, unknown>;
+}
+
+export interface SettingChange {
+  path: string;
+  before: string;
+  after: string;
+  secret?: boolean;
 }
 
 export interface SystemReportResponse {

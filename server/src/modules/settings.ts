@@ -108,6 +108,63 @@ const settingsSchema = z.object({
   sessionDurationDays: z.number().int().min(1).max(90).optional()
 });
 
+interface SettingChange {
+  path: string;
+  before: string;
+  after: string;
+  secret?: boolean;
+}
+
+const SECRET_SETTING = /password|secret|token/i;
+
+function flattenSettings(value: unknown, prefix: string, target: Map<string, string>) {
+  if (Array.isArray(value)) {
+    const flat = value.every((item) => item === null || typeof item !== 'object');
+    target.set(
+      prefix,
+      flat
+        ? value.map((item) => String(item ?? '')).join(', ')
+        : JSON.stringify(value)
+    );
+    return;
+  }
+  if (value && typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      flattenSettings(item, prefix ? `${prefix}.${key}` : key, target);
+    }
+    return;
+  }
+  target.set(prefix, value === null || value === undefined ? '' : String(value));
+}
+
+function shorten(value: string, length = 300): string {
+  return value.length > length ? `${value.slice(0, length - 1)}…` : value;
+}
+
+function settingChanges(
+  before: ReturnType<SettingsStore['get']>,
+  after: ReturnType<SettingsStore['get']>
+): SettingChange[] {
+  const previous = new Map<string, string>();
+  const next = new Map<string, string>();
+  flattenSettings(before, '', previous);
+  flattenSettings(after, '', next);
+
+  const changes: SettingChange[] = [];
+  for (const [path, previousValue] of previous) {
+    const nextValue = next.get(path) ?? '';
+    if (previousValue === nextValue) continue;
+    const secret = SECRET_SETTING.test(path);
+    changes.push({
+      path,
+      before: secret ? '' : shorten(previousValue),
+      after: secret ? '' : shorten(nextValue),
+      ...(secret ? { secret: true } : {})
+    });
+  }
+  return changes.slice(0, 100);
+}
+
 function adminSettingsView(settings: ReturnType<SettingsStore['get']>) {
   return {
     ...settings,
@@ -177,14 +234,14 @@ export function settingsRoutes(): Router {
         }
       }
       store.set(body as Record<string, unknown>);
+      const settings = store.get();
       audit(req.db, {
         userId: req.user!.id,
         action: 'settings.updated',
         entity: 'settings',
-        details: { keys: Object.keys(body) },
+        details: { keys: Object.keys(body), changes: settingChanges(current, settings) },
         ip: req.ip
       });
-      const settings = store.get();
       void syncHolidays(req.db, settings).catch(() => undefined);
       res.json(adminSettingsView(settings));
     })

@@ -846,6 +846,23 @@ describe('TeamCal API', () => {
     expect(actions).toContain('auth.login_failed');
     expect(actions).not.toContain('event.created');
 
+    const settingsRow = report.body.entries.find(
+      (entry: any) =>
+        entry.action === 'settings.updated' &&
+        Array.isArray(entry.details.changes) &&
+        entry.details.changes.some((change: any) => change.path === 'appName')
+    );
+    expect(settingsRow).toBeTruthy();
+    expect(settingsRow.details.changes).toEqual(
+      expect.arrayContaining([
+        {
+          path: 'appName',
+          before: 'TeamCal Test',
+          after: 'TeamCal System Test'
+        }
+      ])
+    );
+
     const createdRow = report.body.entries.find(
       (entry: any) => entry.action === 'user.created' && entry.target?.username === 'loguser'
     );
