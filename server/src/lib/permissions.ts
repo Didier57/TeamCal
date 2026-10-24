@@ -66,6 +66,8 @@ export interface EventRow {
   rrule: string | null;
   recurrence_until: string | null;
   rdates?: string | null;
+  holiday_source_id?: string | null;
+  holiday_key?: string | null;
   sequence: number;
   status: string;
   deleted_at?: string | null;

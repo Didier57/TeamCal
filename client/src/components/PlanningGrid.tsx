@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { countryLabel } from '../countries';
 import { useI18n } from '../i18n';
 import { addDaysToDateKey, toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
 import type { Calendar, Occurrence, PublicSettings, ViewKind } from '../types';
@@ -48,6 +49,12 @@ function daysInMonth(key: string): number {
 
 function pad(value: number): string {
   return value.toString().padStart(2, '0');
+}
+
+function countryFlag(code: string): string {
+  const upper = code.toUpperCase();
+  if (!/^[A-Z]{2}$/.test(upper)) return '';
+  return String.fromCodePoint(...[...upper].map((char) => 0x1f1e6 + char.charCodeAt(0) - 65));
 }
 
 function dateKeyOf(date: Date, timeZone: string): string {
@@ -234,6 +241,18 @@ export function PlanningGrid({
     return `${start}–${end}`;
   }
 
+  function hoverTitle(occurrence: Occurrence, description: string): string {
+    const heading = occurrence.holidayCountry
+      ? `${countryLabel(occurrence.holidayCountry, locale)} \u2014 ${occurrence.title}`
+      : occurrence.title;
+    return description ? `${heading}\n\n${description}` : heading;
+  }
+
+  function displayTitle(occurrence: Occurrence): string {
+    const flag = occurrence.holidayCountry ? countryFlag(occurrence.holidayCountry) : '';
+    return flag ? `${flag} ${occurrence.title}` : occurrence.title;
+  }
+
   function chip(occurrence: Occurrence) {
     const color = occurrence.categoryColor ?? occurrence.calendarColor;
     const description = descriptionText(occurrence.description, settings.allowHtmlDescription);
@@ -255,10 +274,10 @@ export function PlanningGrid({
           event.stopPropagation();
           onEdit(occurrence);
         }}
-        title={description ? `${occurrence.title}\n\n${description}` : occurrence.title}
+        title={hoverTitle(occurrence, description)}
       >
         {!occurrence.allDay && <span className="planning-event-time">{timeLabel(occurrence)}</span>}
-        <span className="planning-event-title">{occurrence.title}</span>
+        <span className="planning-event-title">{displayTitle(occurrence)}</span>
       </div>
     );
   }
@@ -290,12 +309,13 @@ export function PlanningGrid({
           event.stopPropagation();
           onEdit(occurrence);
         }}
-        title={`${owner ? `${owner} · ` : ''}${time ? `${time} · ` : ''}${occurrence.title}${
-          description ? `\n\n${description}` : ''
-        }`}
+        title={`${owner ? `${owner} · ` : ''}${time ? `${time} · ` : ''}${hoverTitle(
+          occurrence,
+          description
+        )}`}
       >
         {time && <span className="month-event-time">{time}</span>}
-        <span className="month-event-title">{occurrence.title}</span>
+        <span className="month-event-title">{displayTitle(occurrence)}</span>
       </div>
     );
   }
@@ -394,11 +414,11 @@ export function PlanningGrid({
                           background: `color-mix(in srgb, ${color} 11%, var(--color-surface))`
                         }}
                         onClick={() => onEdit(occurrence)}
-                        title={`${occurrence.title}${description ? `\n\n${description}` : ''}`}
+                        title={hoverTitle(occurrence, description)}
                       >
                         <span className="mobile-event-time">{timeLabel(occurrence)}</span>
                         <span className="mobile-event-body">
-                          <span className="mobile-event-title">{occurrence.title}</span>
+                          <span className="mobile-event-title">{displayTitle(occurrence)}</span>
                           {owner && <span className="mobile-event-owner">{owner}</span>}
                         </span>
                       </button>

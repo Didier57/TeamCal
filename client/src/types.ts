@@ -200,6 +200,7 @@ export interface Occurrence {
   categoryId: string | null;
   categoryName: string | null;
   categoryColor: string | null;
+  holidayCountry?: string | null;
   calendarId: string;
   calendarColor: string;
   ownerId: string;
