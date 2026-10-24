@@ -48,15 +48,14 @@ export function exportRoutes(): Router {
 
       const events = req.db
         .prepare(
-          `SELECT DISTINCT e.*, c.name AS category_name
+          `SELECT e.*, c.name AS category_name
            FROM events e
-           LEFT JOIN event_participants p ON p.event_id = e.id AND p.user_id = ?
            LEFT JOIN categories c ON c.id = e.category_id
            WHERE e.status <> 'cancelled'
-             AND (e.owner_id = ? OR e.created_by = ? OR p.user_id IS NOT NULL)
+             AND e.owner_id = ?
            ORDER BY e.start_at`
         )
-        .all(user.id, user.id, user.id) as ExportEventRow[];
+        .all(user.id) as ExportEventRow[];
 
       const eventIds = events.map((event) => event.id);
       const exceptions: ExceptionRow[] =

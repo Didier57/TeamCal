@@ -681,6 +681,19 @@ describe('TeamCal API', () => {
         timezone: 'Europe/Paris'
       });
 
+    await admin
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: adminCalendar.id,
+        title: 'Admin shared export',
+        start: '2028-02-09T11:00:00.000Z',
+        end: '2028-02-09T12:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris',
+        participantIds: [bobId]
+      });
+
     const bob = request.agent(app);
     const login = await bob
       .post('/api/auth/login')
@@ -723,6 +736,15 @@ describe('TeamCal API', () => {
     expect(bobExport.text).toContain('CATEGORIES:Export category');
     expect(bobExport.text).toContain('UID:self-import-1');
     expect(bobExport.text).not.toContain('Admin private export');
+    expect(bobExport.text).not.toContain('Admin shared export');
+
+    const bobReimport = await bob
+      .post('/api/import/ics')
+      .set('X-CSRF-Token', bobCsrf)
+      .send({ content: bobExport.text as string });
+    expect(bobReimport.status).toBe(201);
+    expect(bobReimport.body.imported).toBe(0);
+    expect(bobReimport.body.updated).toBe(1);
 
     const adminExport = await admin.get(`/api/export/ics?userId=${bobId}`);
     expect(adminExport.status).toBe(200);
