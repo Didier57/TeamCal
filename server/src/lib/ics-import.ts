@@ -567,6 +567,9 @@ export function importIcsEvents(db: DB, options: ImportIcsOptions): ImportIcsRes
         imported += 1;
       }
       eventIdByUid.set(sourceUid(event, index), eventId);
+      db.prepare(
+        'INSERT OR IGNORE INTO event_participants (event_id, user_id) VALUES (?, ?)'
+      ).run(eventId, target.id);
       db.prepare('DELETE FROM event_exceptions WHERE event_id = ?').run(eventId);
       for (const occurrenceStart of event.exdates) {
         insertException(eventId, occurrenceStart, 'cancelled');

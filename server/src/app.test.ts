@@ -611,11 +611,12 @@ describe('TeamCal API', () => {
     expect(meeting).toBeTruthy();
     expect(meeting.start).toBe('2027-01-15T09:00:00.000Z');
     expect(meeting.categoryId).toBe(category.body.id);
-    expect(meeting.participantIds).toEqual([]);
+    expect(meeting.participantIds).toEqual([bobId]);
     const allDay = events.body.find((event: any) => event.title === 'Deux jours');
     expect(allDay.allDay).toBe(true);
     expect(allDay.start).toBe('2027-02-01');
     expect(allDay.end).toBe('2027-02-02');
+    expect(allDay.participantIds).toEqual([bobId]);
     expect(emailCount()).toBe(emailsBefore);
 
     const repeated = await agent
@@ -629,6 +630,12 @@ describe('TeamCal API', () => {
       `/api/events?start=2027-01-01T00:00:00.000Z&end=2027-03-01T00:00:00.000Z&calendarIds=${bobCalendar.id}`
     );
     expect(afterRepeat.body).toHaveLength(2);
+    const repeatedMeeting = afterRepeat.body.find((event: any) => event.title === 'Réunion importée');
+    expect(repeatedMeeting.participantIds).toEqual([bobId]);
+    const participantCount = db
+      .prepare('SELECT COUNT(*) AS count FROM event_participants WHERE event_id = ?')
+      .get(repeatedMeeting.eventId) as { count: number };
+    expect(participantCount.count).toBe(1);
   });
 
   it('prevents non-admins from reading administration settings', async () => {
