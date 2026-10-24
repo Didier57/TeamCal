@@ -153,6 +153,9 @@ export function EventDialog({
 
   function validate(): string | null {
     if (!form.title.trim()) return t('event.requiredTitle');
+    if (creating && categories.length > 0 && !form.categoryId) {
+      return t('event.requiredCategory');
+    }
     if (form.allDay) {
       if (form.endInput < form.startInput) return t('event.endBeforeStart');
     } else if (new Date(form.endInput) <= new Date(form.startInput)) {
@@ -447,6 +450,7 @@ export function EventDialog({
                 <select
                   value={form.categoryId ?? ''}
                   onChange={(event) => update('categoryId', event.target.value || null)}
+                  required={creating && categories.length > 0}
                 >
                   <option value="">{t('common.none')}</option>
                   {categories.map((category) => (
