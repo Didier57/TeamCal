@@ -15,6 +15,7 @@ import type {
   ViewKind
 } from '../types';
 import { EventDialog, draftFromOccurrence, type EventDraft } from '../components/EventDialog';
+import { EventReadonlyDialog } from '../components/EventReadonlyDialog';
 import { ViewsDialog } from '../components/ViewsDialog';
 
 interface DialogState {
@@ -112,6 +113,7 @@ export function CalendarPage() {
   const [flash, setFlash] = useState<string | null>(null);
   const [timezoneNoticeDismissed, setTimezoneNoticeDismissed] = useState(false);
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [linkedEventId, setLinkedEventId] = useState<string | null>(null);
   const [viewsOpen, setViewsOpen] = useState(false);
   const flashTimer = useRef<number | null>(null);
   const knownEventIds = useRef<Set<string> | null>(null);
@@ -133,6 +135,20 @@ export function CalendarPage() {
       { replace: true }
     );
   }, [view, currentDateKey, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const requestedEvent = searchParams.get('event');
+    if (!requestedEvent) return;
+    setLinkedEventId(requestedEvent);
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('event');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (searchParams.get('manageViews') !== '1') return;
@@ -483,6 +499,20 @@ export function CalendarPage() {
 
   if (!settings) return null;
 
+  const linkedEvent = linkedEventId
+    ? events.find((item) => item.eventId === linkedEventId || item.id === linkedEventId)
+    : undefined;
+  const linkedCalendarName = linkedEvent
+    ? calendars.find((calendar) => calendar.id === linkedEvent.calendarId)?.name ?? null
+    : null;
+  const linkedParticipants = linkedEvent
+    ? linkedEvent.participantIds.map((id) => {
+        const participant = users.find((item) => item.id === id);
+        if (!participant) return id;
+        return `${participant.firstName ?? ''} ${participant.lastName ?? ''}`.trim() || participant.username;
+      })
+    : [];
+
   return (
     <div className="calendar-page">
       <section className="calendar-main">
@@ -597,6 +627,17 @@ export function CalendarPage() {
             showFlash(message);
             void loadEvents();
           }}
+        />
+      )}
+
+      {linkedEventId && (
+        <EventReadonlyDialog
+          eventId={linkedEventId}
+          calendarName={linkedCalendarName}
+          categoryName={linkedEvent?.categoryName ?? null}
+          participants={linkedParticipants}
+          users={users}
+          onClose={() => setLinkedEventId(null)}
         />
       )}
 

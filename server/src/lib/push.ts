@@ -147,7 +147,7 @@ export async function sendPushEvent(
   configureVapid(db, settings);
   const base = (settings.baseUrl || '').replace(/\/+$/, '');
   const dateKey = event.start_at.slice(0, 10);
-  const url = `${base}/?date=${dateKey}`;
+  const url = `${base}/?date=${dateKey}&event=${encodeURIComponent(event.id)}`;
   let sent = 0;
   let failed = 0;
   let missingSubscriptions = 0;

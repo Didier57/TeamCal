@@ -3,7 +3,7 @@ import { apiGet, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { formatDate } from '../format';
 import { useI18n } from '../i18n';
-import type { EventDetail } from '../types';
+import type { EventDetail, User } from '../types';
 import { EventHistory } from './EventHistory';
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
   calendarName?: string | null;
   categoryName?: string | null;
   participants?: string[];
+  users?: User[];
   onClose: () => void;
 }
 
@@ -26,6 +27,7 @@ export function EventReadonlyDialog({
   calendarName,
   categoryName,
   participants = [],
+  users = [],
   onClose
 }: Props) {
   const { settings } = useAuth();
@@ -75,6 +77,15 @@ export function EventReadonlyDialog({
     event?.priority && settings?.priorities[event.priority - 1]
       ? labelFor(t, 'priority', settings.priorities[event.priority - 1])
       : null;
+
+  const participantNames =
+    participants.length > 0
+      ? participants
+      : (detail?.event.participantIds ?? []).map((id) => {
+          const user = users.find((item) => item.id === id);
+          if (!user) return id;
+          return `${user.firstName ?? ''} ${user.lastName ?? ''}`.trim() || user.username;
+        });
 
   return (
     <div
@@ -167,7 +178,11 @@ export function EventReadonlyDialog({
               )}
               <h3>{t('event.participants')}</h3>
               <p className="event-view-participants">
-                {participants.length > 0 ? participants.join(', ') : <span className="muted">{'\u2014'}</span>}
+                {participantNames.length > 0 ? (
+                  participantNames.join(', ')
+                ) : (
+                  <span className="muted">{'\u2014'}</span>
+                )}
               </p>
             </div>
           )}
