@@ -915,6 +915,13 @@ label small,
   font-size: 18px;
 }
 
+.modal-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .modal-body {
   padding: 18px 20px;
 }

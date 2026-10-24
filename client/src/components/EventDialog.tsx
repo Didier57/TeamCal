@@ -91,17 +91,19 @@ export function EventDialog({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<'save' | 'delete' | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
   const [participantFilter, setParticipantFilter] = useState('');
   const [conflicts, setConflicts] = useState<EventConflict[] | null>(null);
   const [conflictTotal, setConflictTotal] = useState(0);
   const [conflictScope, setConflictScope] = useState<'series' | 'occurrence' | null>(null);
 
-  const isRecurring = Boolean(mode === 'edit' && occurrence?.recurring);
-  const canDelete = Boolean(mode === 'edit' && occurrence?.deletable);
+  const creating = mode === 'create' || duplicating;
+  const isRecurring = Boolean(!creating && occurrence?.recurring);
+  const canDelete = Boolean(!creating && occurrence?.deletable);
 
   const availableCalendars = useMemo(
-    () => calendars.filter((calendar) => (mode === 'create' ? calendar.canCreate : calendar.canEdit)),
-    [calendars, mode]
+    () => calendars.filter((calendar) => (creating ? calendar.canCreate : calendar.canEdit)),
+    [calendars, creating]
   );
 
   const filteredUsers = useMemo(() => {
@@ -193,7 +195,7 @@ export function EventDialog({
     setError(null);
     if (!force) clearConflicts();
     try {
-      if (mode === 'create') {
+      if (creating) {
         await apiPost('/events', force ? { ...payload(), force: true } : payload());
         onSaved(t('calendar.eventCreated'));
       } else if (occurrence) {
@@ -262,6 +264,20 @@ export function EventDialog({
     void doDelete('series');
   }
 
+  function onDuplicate() {
+    const creatable = calendars.filter((calendar) => calendar.canCreate);
+    setDuplicating(true);
+    setPending(null);
+    setError(null);
+    clearConflicts();
+    setForm((current) => ({
+      ...current,
+      calendarId: creatable.some((calendar) => calendar.id === current.calendarId)
+        ? current.calendarId
+        : creatable[0]?.id ?? current.calendarId
+    }));
+  }
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <div
@@ -271,10 +287,36 @@ export function EventDialog({
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="modal-header">
-          <h2>{mode === 'create' ? t('event.new') : t('event.edit')}</h2>
-          <button type="button" className="icon-button" onClick={onClose} aria-label={t('common.close')}>
-            ×
-          </button>
+          <h2>{creating ? t('event.new') : t('event.edit')}</h2>
+          <span className="modal-header-actions">
+            {!creating && (
+              <button
+                type="button"
+                className="icon-button"
+                onClick={onDuplicate}
+                title={t('event.duplicate')}
+                aria-label={t('event.duplicate')}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="18"
+                  height="18"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                  <path d="M15 5.5V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h.5" />
+                </svg>
+              </button>
+            )}
+            <button type="button" className="icon-button" onClick={onClose} aria-label={t('common.close')}>
+              ×
+            </button>
+          </span>
         </div>
         <form onSubmit={onSubmit}>
           <div className="modal-body">
@@ -320,7 +362,7 @@ export function EventDialog({
             {conflicts && (
               <div className="conflict-panel">
                 <p>
-                  {mode === 'create' ? t('event.conflictQuestion') : t('event.conflictSaveQuestion')}
+                  {creating ? t('event.conflictQuestion') : t('event.conflictSaveQuestion')}
                 </p>
                 <ul className="conflict-list">
                   {conflicts.map((conflict) => (
@@ -345,7 +387,7 @@ export function EventDialog({
                     disabled={busy}
                     onClick={() => void doSave(conflictScope ?? 'series', true)}
                   >
-                    {mode === 'create' ? t('event.addAnyway') : t('event.saveAnyway')}
+                    {creating ? t('event.addAnyway') : t('event.saveAnyway')}
                   </button>
                   <button
                     type="button"
@@ -578,7 +620,7 @@ export function EventDialog({
                   />
                 </div>
               )}
-              {mode === 'edit' && occurrence && (
+              {!creating && occurrence && (
                 <div className="span-2">
                   <EventHistory eventId={occurrence.eventId} />
                 </div>
@@ -587,7 +629,7 @@ export function EventDialog({
             {error && <div className="alert error">{error}</div>}
           </div>
           <div className="modal-footer">
-            {mode === 'edit' && canDelete && (
+            {!creating && canDelete && (
               <button
                 type="button"
                 className="button danger"
