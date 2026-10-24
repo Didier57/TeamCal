@@ -51,7 +51,7 @@ export function userRoutes(): Router {
     asyncHandler(async (req, res) => {
       const rows = req.db
         .prepare(
-          `SELECT id, username, email, first_name, last_name, is_admin, is_active, language, timezone, country, default_view, created_at
+          `SELECT id, username, email, first_name, last_name, is_admin, is_active, language, timezone, country, default_view, last_login_at, created_at
            FROM users ORDER BY first_name, last_name, username`
         )
         .all() as UserRow[];
@@ -68,7 +68,9 @@ export function userRoutes(): Router {
           timezone: u.timezone,
           country: u.country,
           defaultView: u.default_view,
-          ...(isAdmin ? { email: u.email, createdAt: u.created_at } : {})
+          ...(isAdmin
+            ? { email: u.email, lastLoginAt: u.last_login_at, createdAt: u.created_at }
+            : {})
         }))
       );
     })

@@ -1341,6 +1341,9 @@ describe('TeamCal API', () => {
       .send({ username: 'bob', password: 'Password123!' });
     const bobCsrf = bobLogin.body.csrfToken as string;
 
+    const listed = await agent.get('/api/users');
+    expect(listed.body.find((item: any) => item.username === 'bob').lastLoginAt).toBeTruthy();
+
     const forbidden = await bob
       .put('/api/auth/me/preferences')
       .set('X-CSRF-Token', bobCsrf)
