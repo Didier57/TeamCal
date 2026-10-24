@@ -1330,6 +1330,15 @@ describe('TeamCal API', () => {
     expect(personal.status).toBe(200);
     expect(personal.body.user.defaultView).toBe(`view:${viewId}`);
 
+    const notified = await agent
+      .put('/api/auth/me/preferences')
+      .set('X-CSRF-Token', csrf)
+      .send({ notifyNewEvents: true });
+    expect(notified.status).toBe(200);
+    expect(notified.body.user.notifyNewEvents).toBe(true);
+    const me = await agent.get('/api/auth/me');
+    expect(me.body.user.notifyNewEvents).toBe(true);
+
     await agent.post('/api/users').set('X-CSRF-Token', csrf).send({
       username: 'bob',
       email: 'bob@example.com',

@@ -164,6 +164,7 @@ const fr: Record<string, string> = {
   'calendar.timezoneMismatch': 'Le fuseau horaire de l’application diffère de celui de votre navigateur.',
   'calendar.owner': 'Propriétaire',
   'calendar.noEvents': 'Aucun événement sur cette période.',
+  'calendar.newEventNotification': 'Nouvel événement : {title}',
   'event.title': 'Titre',
   'event.new': 'Nouvel événement',
   'event.edit': "Modifier l'événement",
@@ -451,6 +452,11 @@ const fr: Record<string, string> = {
   'prefs.confirmPassword': 'Confirmer le mot de passe',
   'prefs.mismatch': 'Les mots de passe ne correspondent pas.',
   'prefs.theme': 'Thème personnel',
+  'prefs.notifications': 'Notifications Windows pour les nouveaux événements',
+  'prefs.notificationsHint':
+    'Une notification s’affiche lorsqu’un autre utilisateur ajoute un événement dans les calendriers affichés.',
+  'prefs.notificationsBlocked':
+    'Les notifications sont bloquées par le navigateur. Autorisez-les dans les paramètres du site.',
   'prefs.useGlobal': 'Utiliser le thème global',
   'prefs.dateFormat': 'Format de date personnel',
   'prefs.timeFormat': "Format d'heure personnel",
@@ -705,6 +711,7 @@ const en: Record<string, string> = {
   'calendar.timezoneMismatch': 'The application time zone differs from your browser time zone.',
   'calendar.owner': 'Owner',
   'calendar.noEvents': 'No event in this period.',
+  'calendar.newEventNotification': 'New event: {title}',
   'event.title': 'Title',
   'event.new': 'New event',
   'event.edit': 'Edit event',
@@ -991,6 +998,11 @@ const en: Record<string, string> = {
   'prefs.confirmPassword': 'Confirm password',
   'prefs.mismatch': 'Passwords do not match.',
   'prefs.theme': 'Personal theme',
+  'prefs.notifications': 'Windows notifications for new events',
+  'prefs.notificationsHint':
+    'A notification appears when another user adds an event in the displayed calendars.',
+  'prefs.notificationsBlocked':
+    'Notifications are blocked by the browser. Allow them in the site settings.',
   'prefs.useGlobal': 'Use global theme',
   'prefs.dateFormat': 'Personal date format',
   'prefs.timeFormat': 'Personal time format',
@@ -1245,6 +1257,7 @@ const de: Record<string, string> = {
   'calendar.timezoneMismatch': 'Die Zeitzone der Anwendung unterscheidet sich von der Ihres Browsers.',
   'calendar.owner': 'Eigentümer',
   'calendar.noEvents': 'Keine Termine in diesem Zeitraum.',
+  'calendar.newEventNotification': 'Neuer Termin: {title}',
   'event.title': 'Titel',
   'event.new': 'Neuer Termin',
   'event.edit': 'Termin bearbeiten',
@@ -1532,6 +1545,11 @@ const de: Record<string, string> = {
   'prefs.confirmPassword': 'Passwort bestätigen',
   'prefs.mismatch': 'Die Passwörter stimmen nicht überein.',
   'prefs.theme': 'Persönliches Design',
+  'prefs.notifications': 'Windows-Benachrichtigungen für neue Termine',
+  'prefs.notificationsHint':
+    'Eine Benachrichtigung erscheint, wenn ein anderer Benutzer einen Termin in den angezeigten Kalendern hinzufügt.',
+  'prefs.notificationsBlocked':
+    'Benachrichtigungen sind vom Browser blockiert. Erlauben Sie sie in den Website-Einstellungen.',
   'prefs.useGlobal': 'Globales Design verwenden',
   'prefs.dateFormat': 'Persönliches Datumsformat',
   'prefs.timeFormat': 'Persönliches Zeitformat',

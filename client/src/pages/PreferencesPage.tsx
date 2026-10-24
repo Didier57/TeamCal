@@ -38,6 +38,10 @@ export function PreferencesPage() {
   const [defaultView, setDefaultView] = useState<string>(user?.defaultView ?? 'week');
   const [views, setViews] = useState<CustomView[]>([]);
   const [theme, setThemeValue] = useState<ThemeKind | ''>(user?.theme ?? '');
+  const [notifyNewEvents, setNotifyNewEvents] = useState(Boolean(user?.notifyNewEvents));
+  const [notificationsBlocked, setNotificationsBlocked] = useState(
+    typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied'
+  );
   const [useCustomColors, setUseCustomColors] = useState(Boolean(user?.themeColors));
   const [themeColors, setThemeColors] = useState<{ light: ThemeColors; dark: ThemeColors }>({
     light: {
@@ -120,6 +124,28 @@ export function PreferencesPage() {
     }
   }
 
+  async function toggleNotifications(checked: boolean) {
+    if (!checked) {
+      setNotifyNewEvents(false);
+      return;
+    }
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setNotificationsBlocked(true);
+      return;
+    }
+    const permission =
+      Notification.permission === 'default'
+        ? await Notification.requestPermission()
+        : Notification.permission;
+    if (permission !== 'granted') {
+      setNotificationsBlocked(true);
+      setNotifyNewEvents(false);
+      return;
+    }
+    setNotificationsBlocked(false);
+    setNotifyNewEvents(true);
+  }
+
   async function saveProfile(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -137,6 +163,7 @@ export function PreferencesPage() {
         timeFormat: timeFormat || null,
         defaultView,
         theme: theme || null,
+        notifyNewEvents,
         themeColors: settings?.allowUserColors && useCustomColors ? themeColors : null
       });
       setUser(response.user);
@@ -290,6 +317,19 @@ export function PreferencesPage() {
               <option value="dark">{t('common.dark')}</option>
             </select>
           </label>
+        </div>
+        <div className="notification-settings">
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={notifyNewEvents}
+              onChange={(event) => void toggleNotifications(event.target.checked)}
+            />
+            <span>{t('prefs.notifications')}</span>
+          </label>
+          <p className="hint">
+            {notificationsBlocked ? t('prefs.notificationsBlocked') : t('prefs.notificationsHint')}
+          </p>
         </div>
         {settings.allowUserColors && (
           <div className="theme-user-block">

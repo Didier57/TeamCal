@@ -322,6 +322,12 @@ label small,
   font-size: 13px;
 }
 
+.notification-settings {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
 .action-edit {
   color: var(--color-primary);
 }

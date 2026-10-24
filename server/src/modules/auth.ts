@@ -78,7 +78,8 @@ const preferencesSchema = z.object({
     .regex(/^(day|week|month|view:[0-9a-fA-F-]{36})$/)
     .optional(),
   theme: z.enum(['light', 'dark']).nullable().optional(),
-  themeColors: themeColorsSchema
+  themeColors: themeColorsSchema,
+  notifyNewEvents: z.boolean().optional()
 });
 
 const passwordSchema = z.object({
@@ -280,7 +281,7 @@ export function authRoutes(): Router {
         .prepare(
           `UPDATE users SET first_name = ?, last_name = ?, email = ?, language = ?, timezone = ?,
              country = ?, date_format = ?, time_format = ?, default_view = ?, theme = ?, theme_colors = ?,
-             updated_at = ? WHERE id = ?`
+             notify_new_events = ?, updated_at = ? WHERE id = ?`
         )
         .run(
           body.firstName ?? current.first_name,
@@ -294,6 +295,11 @@ export function authRoutes(): Router {
           body.defaultView ?? current.default_view,
           body.theme !== undefined ? body.theme : current.theme,
           themeColors,
+          body.notifyNewEvents !== undefined
+            ? body.notifyNewEvents
+              ? 1
+              : 0
+            : current.notify_new_events,
           nowIso(),
           current.id
         );

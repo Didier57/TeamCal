@@ -114,6 +114,8 @@ export function CalendarPage() {
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [viewsOpen, setViewsOpen] = useState(false);
   const flashTimer = useRef<number | null>(null);
+  const knownEventIds = useRef<Set<string> | null>(null);
+  const pollInFlight = useRef(false);
 
   const requestedViewId = searchParams.get('view');
 
@@ -206,28 +208,90 @@ export function CalendarPage() {
       .finally(() => setLoading(false));
   }, [loadReferenceData, t]);
 
-  const loadEvents = useCallback(async () => {
-    if (selected.length === 0) {
-      setEvents([]);
-      return;
-    }
-    const range = rangeFor(date, view, firstDay);
-    try {
-      const data = await apiGet<Occurrence[]>(
-        `/events?start=${encodeURIComponent(range.start.toISOString())}&end=${encodeURIComponent(
-          range.end.toISOString()
-        )}&calendarIds=${encodeURIComponent(selected.join(','))}`
-      );
-      setEvents(data);
-      setError(null);
-    } catch {
-      setError(t('calendar.error'));
-    }
-  }, [date, view, firstDay, selected, timeZone, t]);
+  const loadEvents = useCallback(
+    async (options?: { silent?: boolean; notify?: boolean }) => {
+      if (selected.length === 0) {
+        setEvents([]);
+        knownEventIds.current = new Set();
+        return;
+      }
+      const range = rangeFor(date, view, firstDay);
+      try {
+        const data = await apiGet<Occurrence[]>(
+          `/events?start=${encodeURIComponent(range.start.toISOString())}&end=${encodeURIComponent(
+            range.end.toISOString()
+          )}&calendarIds=${encodeURIComponent(selected.join(','))}`
+        );
+        setEvents(data);
+        if (!options?.silent) setError(null);
+        if (
+          options?.notify &&
+          knownEventIds.current &&
+          user?.notifyNewEvents &&
+          typeof Notification !== 'undefined' &&
+          Notification.permission === 'granted'
+        ) {
+          const known = knownEventIds.current;
+          const added = data.filter(
+            (occurrence) => !known.has(occurrence.eventId) && occurrence.ownerId !== user.id
+          );
+          for (const occurrence of added.slice(0, 3)) {
+            try {
+              const notification = new Notification(
+                t('calendar.newEventNotification').replace('{title}', occurrence.title),
+                {
+                  body: formatDate(occurrence.start, {
+                    locale,
+                    timeZone,
+                    dateFormat: settings?.dateFormat ?? 'dd/MM/yyyy',
+                    timeFormat: settings?.timeFormat ?? '24',
+                    withTime: !occurrence.allDay
+                  })
+                }
+              );
+              notification.onclick = () => {
+                window.focus();
+                notification.close();
+              };
+            } catch {
+              break;
+            }
+          }
+        }
+        knownEventIds.current = new Set(data.map((occurrence) => occurrence.eventId));
+      } catch {
+        if (!options?.silent) setError(t('calendar.error'));
+      }
+    },
+    [date, view, firstDay, selected, user?.id, user?.notifyNewEvents, timeZone, locale, settings?.dateFormat, settings?.timeFormat, t]
+  );
 
   useEffect(() => {
     void loadEvents();
   }, [loadEvents]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== 'visible' || dialog || viewsOpen) return;
+      if (pollInFlight.current) return;
+      pollInFlight.current = true;
+      void loadEvents({ silent: true, notify: true }).finally(() => {
+        pollInFlight.current = false;
+      });
+    }, 20000);
+    const onFocus = () => {
+      if (dialog || viewsOpen || pollInFlight.current) return;
+      pollInFlight.current = true;
+      void loadEvents({ silent: true, notify: true }).finally(() => {
+        pollInFlight.current = false;
+      });
+    };
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [loadEvents, dialog, viewsOpen]);
 
   const selectedCalendars = useMemo(
     () => calendars.filter((calendar) => selected.includes(calendar.id)),

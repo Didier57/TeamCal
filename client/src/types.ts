@@ -19,6 +19,7 @@ export interface User {
   themeColors?: { light: ThemeColors; dark: ThemeColors } | null;
   feedToken?: string | null;
   country?: string | null;
+  notifyNewEvents?: boolean;
   lastLoginAt?: string | null;
   createdAt?: string;
 }

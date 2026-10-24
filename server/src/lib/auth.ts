@@ -22,6 +22,7 @@ export interface UserRow {
   password_token: string | null;
   password_token_expires_at: string | null;
   country: string | null;
+  notify_new_events: number;
   last_login_at: string | null;
   created_at: string;
   updated_at: string;
@@ -81,6 +82,7 @@ export function publicUser(user: UserRow) {
     themeColors,
     feedToken: user.feed_token,
     country: user.country,
+    notifyNewEvents: Boolean(user.notify_new_events),
     lastLoginAt: user.last_login_at,
     createdAt: user.created_at
   };
