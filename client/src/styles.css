@@ -462,6 +462,7 @@ label small,
   background: color-mix(in srgb, var(--color-primary) 12%, transparent);
 }
 
+.header-events-menu,
 .header-views-menu,
 .header-reports-menu {
   display: inline-flex;
@@ -475,12 +476,14 @@ label small,
   color: var(--color-muted);
 }
 
+.header-events-menu .menu-popover,
 .header-views-menu .menu-popover,
 .header-reports-menu .menu-popover {
   left: 0;
   right: auto;
 }
 
+.header-events-menu .nav-menu-button.active,
 .header-reports-menu .nav-menu-button.active {
   color: var(--color-primary);
 }
@@ -1394,7 +1397,8 @@ label small,
 .admin-page,
 .preferences-page,
 .search-page,
-.report-page {
+.report-page,
+.events-page {
   max-width: 1200px;
   margin: 0 auto;
 }

@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAdmin, requireAuth } from '../lib/auth';
+import { requireAuth } from '../lib/auth';
 import { audit } from '../lib/audit';
 import { importIcsEvents } from '../lib/ics-import';
 import { asyncHandler, HttpError } from '../lib/util';
 import { SettingsStore } from '../settings';
 
 const importSchema = z.object({
-  userId: z.string().min(1),
+  userId: z.string().min(1).optional(),
   defaultCategoryId: z.string().nullable().optional(),
   content: z.string().min(1).max(10_000_000)
 });
@@ -18,10 +18,15 @@ export function importRoutes(): Router {
 
   router.post(
     '/ics',
-    requireAdmin,
     asyncHandler(async (req, res) => {
       const body = importSchema.parse(req.body);
-      const user = req.db.prepare('SELECT id FROM users WHERE id = ?').get(body.userId);
+      const isAdmin = Boolean(req.user!.is_admin);
+      const userId = isAdmin ? body.userId : req.user!.id;
+      if (!userId) throw new HttpError(400, 'user_required');
+      if (!isAdmin && body.userId && body.userId !== req.user!.id) {
+        throw new HttpError(403, 'forbidden');
+      }
+      const user = req.db.prepare('SELECT id FROM users WHERE id = ?').get(userId);
       if (!user) throw new HttpError(404, 'user_not_found');
       if (body.defaultCategoryId) {
         const category = req.db
@@ -31,7 +36,7 @@ export function importRoutes(): Router {
       }
       const settings = new SettingsStore(req.db).get();
       const result = importIcsEvents(req.db, {
-        userId: body.userId,
+        userId,
         content: body.content,
         createdBy: req.user!.id,
         defaultCategoryId: body.defaultCategoryId ?? null,
@@ -41,7 +46,7 @@ export function importRoutes(): Router {
         userId: req.user!.id,
         action: 'events.imported',
         entity: 'user',
-        entityId: body.userId,
+        entityId: userId,
         details: {
           imported: result.imported,
           updated: result.updated,

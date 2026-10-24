@@ -185,6 +185,22 @@ export function CalendarPage() {
     [selectedCalendars, calendars]
   );
 
+  useEffect(() => {
+    if (searchParams.get('newEvent') !== '1' || !writableCalendar) return;
+    const now = new Date();
+    const start = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      now.getHours() + 1,
+      0
+    );
+    openCreate(writableCalendar.id, start, new Date(start.getTime() + 3600000), false);
+    const next = new URLSearchParams(searchParams);
+    next.delete('newEvent');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, writableCalendar]);
+
   function shiftDate(direction: number) {
     if (view === 'day') setDate((current) => addDays(current, direction));
     else if (view === 'week') setDate((current) => addDays(current, direction * 7));

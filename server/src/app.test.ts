@@ -642,6 +642,93 @@ describe('TeamCal API', () => {
     expect(participantCount.count).toBe(1);
   });
 
+  it('lets users import and export only their own calendar', async () => {
+    const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
+    const created = await admin
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'bob',
+        email: 'bob@example.com',
+        firstName: 'Bob',
+        lastName: 'Export',
+        password: 'Password123!'
+      });
+    expect(created.status).toBe(201);
+    const bobId = created.body.id as string;
+
+    const calendars = await admin.get('/api/calendars');
+    const bobCalendar = calendars.body.find((calendar: any) => calendar.ownerId === bobId);
+    const adminCalendar = calendars.body.find((calendar: any) => calendar.ownerId === adminId);
+    expect(bobCalendar).toBeTruthy();
+    expect(adminCalendar).toBeTruthy();
+
+    await admin
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: adminCalendar.id,
+        title: 'Admin private export',
+        start: '2028-02-09T09:00:00.000Z',
+        end: '2028-02-09T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+
+    const bob = request.agent(app);
+    const login = await bob
+      .post('/api/auth/login')
+      .send({ username: 'bob', password: 'Password123!' });
+    const bobCsrf = login.body.csrfToken as string;
+
+    const content = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//TeamCal test//EN',
+      'BEGIN:VEVENT',
+      'UID:self-import-1',
+      'DTSTAMP:20260101T000000Z',
+      'DTSTART;TZID=Europe/Paris:20280210T100000',
+      'DTEND;TZID=Europe/Paris:20280210T110000',
+      'SUMMARY:Bob imported event',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const imported = await bob
+      .post('/api/import/ics')
+      .set('X-CSRF-Token', bobCsrf)
+      .send({ content });
+    expect(imported.status).toBe(201);
+    expect(imported.body.imported).toBe(1);
+
+    const forbiddenImport = await bob
+      .post('/api/import/ics')
+      .set('X-CSRF-Token', bobCsrf)
+      .send({ userId: adminId, content });
+    expect(forbiddenImport.status).toBe(403);
+
+    const bobExport = await bob.get('/api/export/ics');
+    expect(bobExport.status).toBe(200);
+    expect(bobExport.headers['content-type']).toContain('text/calendar');
+    expect(bobExport.headers['content-disposition']).toContain('teamcal_bob.ics');
+    expect(bobExport.text).toContain('SUMMARY:Bob imported event');
+    expect(bobExport.text).not.toContain('Admin private export');
+
+    const adminExport = await admin.get(`/api/export/ics?userId=${bobId}`);
+    expect(adminExport.status).toBe(200);
+    expect(adminExport.text).toContain('SUMMARY:Bob imported event');
+    expect(adminExport.text).not.toContain('Admin private export');
+
+    const adminOwn = await admin.get('/api/export/ics');
+    expect(adminOwn.status).toBe(200);
+    expect(adminOwn.text).toContain('SUMMARY:Admin private export');
+    expect(adminOwn.text).not.toContain('Bob imported event');
+
+    const forbiddenExport = await bob.get(`/api/export/ics?userId=${adminId}`);
+    expect(forbiddenExport.status).toBe(403);
+  });
+
   it('keeps deleted events for the audit log', async () => {
     const { agent, csrf } = await setupAdmin(app);
     const calendars = await agent.get('/api/calendars');

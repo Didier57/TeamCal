@@ -5,6 +5,8 @@ import { CalendarPage } from './pages/CalendarPage';
 import { SearchPage } from './pages/SearchPage';
 import { AdminPage } from './pages/AdminPage';
 import { PreferencesPage } from './pages/PreferencesPage';
+import { ExportPage } from './pages/ExportPage';
+import { ImportAdmin } from './components/admin/ImportAdmin';
 import { ReportAuditPage } from './pages/ReportAuditPage';
 import { ReportSystemPage } from './pages/ReportSystemPage';
 import { LoginPage } from './pages/LoginPage';
@@ -27,6 +29,8 @@ export function App() {
     <Routes>
       <Route element={<AppLayout />}>
         <Route path="/" element={<CalendarPage />} />
+        <Route path="/import" element={<ImportAdmin selfOnly />} />
+        <Route path="/export" element={<ExportPage />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/preferences" element={<PreferencesPage />} />
         <Route

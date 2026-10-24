@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost, ApiError } from '../../api';
+import { useAuth } from '../../app-context';
 import { useI18n } from '../../i18n';
 import type { Category, ImportIcsResult, User } from '../../types';
 
 const MAX_FILE_SIZE = 10_000_000;
 
-export function ImportAdmin() {
+export function ImportAdmin({ selfOnly = false }: { selfOnly?: boolean }) {
+  const { user } = useAuth();
   const { t, errorMessage } = useI18n();
   const [users, setUsers] = useState<User[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -19,14 +21,19 @@ export function ImportAdmin() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    Promise.all([apiGet<User[]>('/users'), apiGet<Category[]>('/categories')])
+    const usersRequest = selfOnly ? Promise.resolve<User[]>([]) : apiGet<User[]>('/users');
+    Promise.all([usersRequest, apiGet<Category[]>('/categories')])
       .then(([loadedUsers, loadedCategories]) => {
         setUsers(loadedUsers);
         setCategories(loadedCategories);
-        setUserId((current) => current || loadedUsers.find((user) => user.isActive)?.id || '');
+        if (selfOnly) {
+          setUserId(user?.id ?? '');
+        } else {
+          setUserId((current) => current || loadedUsers.find((entry) => entry.isActive)?.id || '');
+        }
       })
       .catch(() => setError(t('common.error')));
-  }, [t]);
+  }, [t, selfOnly, user?.id]);
 
   async function runImport() {
     if (!userId || !file) {
@@ -60,23 +67,30 @@ export function ImportAdmin() {
   }
 
   return (
-    <div className="admin-section">
+    <div className={selfOnly ? 'admin-section events-page' : 'admin-section'}>
       <div className="section-header">
-        <h2>{t('admin.importTitle')}</h2>
+        <h2>{selfOnly ? t('events.importTitle') : t('admin.importTitle')}</h2>
       </div>
       <div className="panel">
-        <p className="hint">{t('admin.importHelp')}</p>
+        <p className="hint">{selfOnly ? t('events.importHelp') : t('admin.importHelp')}</p>
         <div className="form-grid">
           <label className="field">
             <span>{t('admin.importUser')}</span>
-            <select value={userId} onChange={(event) => setUserId(event.target.value)}>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {`${user.firstName} ${user.lastName}`.trim() || user.username} ({user.username})
-                  {user.isActive ? '' : ` - ${t('common.inactive')}`}
-                </option>
-              ))}
-            </select>
+            {selfOnly ? (
+              <input
+                readOnly
+                value={`${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || user?.username || ''}
+              />
+            ) : (
+              <select value={userId} onChange={(event) => setUserId(event.target.value)}>
+                {users.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {`${entry.firstName} ${entry.lastName}`.trim() || entry.username} (
+                    {entry.username}){entry.isActive ? '' : ` - ${t('common.inactive')}`}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
           <label className="field">
             <span>{t('admin.importCategory')}</span>

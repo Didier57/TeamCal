@@ -3,6 +3,7 @@ import { apiPut } from '../api';
 import { useAuth } from '../app-context';
 import { languageLabel, useI18n } from '../i18n';
 import type { Language, User } from '../types';
+import { HeaderEventsMenu } from './HeaderEventsMenu';
 import { HeaderReportsMenu } from './HeaderReportsMenu';
 import { HeaderViewsMenu } from './HeaderViewsMenu';
 
@@ -37,6 +38,7 @@ export function AppLayout() {
           <NavLink to="/" end>
             {t('nav.calendar')}
           </NavLink>
+          <HeaderEventsMenu />
           <HeaderViewsMenu />
           <NavLink to="/search">{t('nav.search')}</NavLink>
           <NavLink to="/preferences">{t('nav.preferences')}</NavLink>
