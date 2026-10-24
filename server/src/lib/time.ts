@@ -87,6 +87,10 @@ export function dateKeyInZone(date: Date, timeZone: string): string {
   return `${p.year.toString().padStart(4, '0')}-${p.month.toString().padStart(2, '0')}-${p.day.toString().padStart(2, '0')}`;
 }
 
+export function zoneOffsetMinutes(date: Date, timeZone: string): number {
+  return offsetMinutes(date, timeZone);
+}
+
 export function wallClockAsUtc(date: Date, timeZone: string): Date {
   const p = zonedParts(date, timeZone);
   return new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second));

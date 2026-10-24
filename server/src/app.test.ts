@@ -738,6 +738,80 @@ describe('TeamCal API', () => {
     expect(forbiddenExport.status).toBe(403);
   });
 
+  it('exports a raw ICS with recurrence rules, exceptions and timezones', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const calendars = await agent.get('/api/calendars');
+    const calendarId = calendars.body[0].id as string;
+
+    const recurring = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Raw export weekly',
+        start: '2026-03-02T09:00:00.000Z',
+        end: '2026-03-02T09:30:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris',
+        recurrence: { frequency: 'weekly', interval: 1, count: 4 }
+      });
+    expect(recurring.status).toBe(201);
+
+    const list = await agent.get(
+      `/api/events?start=2026-03-01T00:00:00.000Z&end=2026-04-01T00:00:00.000Z&calendarIds=${calendarId}`
+    );
+    const movedStart = list.body[1].occurrenceStart as string;
+    const cancelledStart = list.body[2].occurrenceStart as string;
+
+    const moved = await agent
+      .patch(`/api/events/${recurring.body.eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({
+        scope: 'occurrence',
+        occurrenceStart: movedStart,
+        title: 'Raw export moved',
+        start: '2026-03-11T14:00:00.000Z',
+        end: '2026-03-11T15:00:00.000Z'
+      });
+    expect(moved.status).toBe(200);
+
+    const cancelled = await agent
+      .delete(
+        `/api/events/${recurring.body.eventId}?scope=occurrence&occurrenceStart=${encodeURIComponent(
+          cancelledStart
+        )}`
+      )
+      .set('X-CSRF-Token', csrf);
+    expect(cancelled.status).toBe(200);
+
+    const allDay = await agent
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Raw export all day',
+        start: '2026-03-05',
+        end: '2026-03-06',
+        allDay: true
+      });
+    expect(allDay.status).toBe(201);
+
+    const exported = await agent.get('/api/export/ics');
+    expect(exported.status).toBe(200);
+    const text = exported.text as string;
+    expect(text).toContain('BEGIN:VTIMEZONE');
+    expect(text).toContain('TZID:Europe/Paris');
+    expect(text).toContain('RRULE:FREQ=WEEKLY;INTERVAL=1;COUNT=4');
+    expect(text).toMatch(/DTSTART;TZID=Europe\/Paris:20260302T100000/);
+    expect(text).toMatch(/RECURRENCE-ID;TZID=Europe\/Paris:\d{8}T\d{6}/);
+    expect(text).toMatch(/EXDATE;TZID=Europe\/Paris:\d{8}T\d{6}/);
+    expect(text).toContain('SUMMARY:Raw export weekly');
+    expect(text).toContain('SUMMARY:Raw export moved');
+    expect(text).toContain('DTSTART;VALUE=DATE:20260305');
+    expect(text).toContain('DTEND;VALUE=DATE:20260307');
+    expect(text.match(/BEGIN:VEVENT/g)).toHaveLength(3);
+  });
+
   it('keeps deleted events for the audit log', async () => {
     const { agent, csrf } = await setupAdmin(app);
     const calendars = await agent.get('/api/calendars');
