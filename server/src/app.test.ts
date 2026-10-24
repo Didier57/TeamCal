@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -500,6 +500,12 @@ describe('TeamCal API', () => {
 
   it('manages manual holidays and keeps adjustments across syncs', async () => {
     const { agent, csrf } = await setupAdmin(app);
+    const category = await agent
+      .post('/api/categories')
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Jours fériés', color: '#ff0000', isHoliday: true });
+    expect(category.status).toBe(201);
+    expect(category.body.isHoliday).toBe(true);
     const pref = await agent
       .put('/api/auth/me/preferences')
       .set('X-CSRF-Token', csrf)
@@ -529,6 +535,15 @@ describe('TeamCal API', () => {
     const events = await agent.get('/api/events?start=2026-08-01T00:00:00.000Z&end=2026-09-01T00:00:00.000Z');
     expect(events.body).toHaveLength(1);
     expect(events.body[0].title).toBe('Fête nationale');
+    expect(events.body[0].categoryId).toBe(category.body.id);
+
+    const other = await agent
+      .post('/api/categories')
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Autre férié', color: '#112233', isHoliday: true });
+    const categories = await agent.get('/api/categories');
+    expect(categories.body.find((item: any) => item.id === category.body.id).isHoliday).toBe(false);
+    expect(categories.body.find((item: any) => item.id === other.body.id).isHoliday).toBe(true);
 
     const synced = await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
     expect(synced.status).toBe(200);
@@ -546,6 +561,83 @@ describe('TeamCal API', () => {
     await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
     const afterDeleteSync = await agent.get('/api/holidays/admin');
     expect(afterDeleteSync.body).toHaveLength(0);
+  });
+
+  it('assigns the holiday category and preserves existing labels during ICS sync', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const category = await agent
+      .post('/api/categories')
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Jours fériés', color: '#ff0000', isHoliday: true });
+    expect(category.status).toBe(201);
+    await agent
+      .put('/api/auth/me/preferences')
+      .set('X-CSRF-Token', csrf)
+      .send({ country: 'FR' });
+
+    let summary = 'Fête source';
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(
+          [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:holiday-1',
+            'DTSTART;VALUE=DATE:20260815',
+            'SUMMARY:' + summary,
+            'END:VEVENT',
+            'END:VCALENDAR'
+          ].join('\r\n'),
+          { status: 200, headers: { 'Content-Type': 'text/calendar' } }
+        )
+    );
+    try {
+      new SettingsStore(db).set({
+        holidaySources: [
+          { id: 'fr-holidays', country: 'FR', url: 'https://example.test/fr.ics', name: 'FR' }
+        ]
+      });
+
+      const synced = await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
+      expect(synced.status).toBe(200);
+      expect(synced.body.errors).toEqual([]);
+
+      let events = await agent.get(
+        '/api/events?start=2026-08-01T00:00:00.000Z&end=2026-09-01T00:00:00.000Z'
+      );
+      expect(events.body).toHaveLength(1);
+      expect(events.body[0].title).toBe('Fête source');
+      expect(events.body[0].categoryId).toBe(category.body.id);
+
+      const list = await agent.get('/api/holidays/admin');
+      const key = list.body[0].key as string;
+      const patched = await agent
+        .patch(`/api/holidays/admin/${encodeURIComponent(key)}`)
+        .set('X-CSRF-Token', csrf)
+        .send({ title: 'Fête nationale' });
+      expect(patched.status).toBe(200);
+
+      summary = 'Fête renommée';
+      await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
+      events = await agent.get(
+        '/api/events?start=2026-08-01T00:00:00.000Z&end=2026-09-01T00:00:00.000Z'
+      );
+      expect(events.body).toHaveLength(1);
+      expect(events.body[0].title).toBe('Fête nationale');
+      expect(events.body[0].categoryId).toBe(category.body.id);
+
+      db.prepare('UPDATE events SET title = ? WHERE holiday_key IS NOT NULL').run('');
+      await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
+      events = await agent.get(
+        '/api/events?start=2026-08-01T00:00:00.000Z&end=2026-09-01T00:00:00.000Z'
+      );
+      expect(events.body).toHaveLength(1);
+      expect(events.body[0].title).toBe('Fête renommée');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('imports ICS events into a user calendar with category matching and no duplicates', async () => {

@@ -7,9 +7,10 @@ interface Row {
   id: string | null;
   name: string;
   color: string;
+  isHoliday: boolean;
 }
 
-const blank: Row = { id: null, name: '', color: '#2f6feb' };
+const blank: Row = { id: null, name: '', color: '#2f6feb', isHoliday: false };
 
 export function CategoriesAdmin() {
   const { t, errorMessage } = useI18n();
@@ -21,18 +22,38 @@ export function CategoriesAdmin() {
 
   async function load() {
     const list = await apiGet<Category[]>('/categories');
-    setRows(list.map((item) => ({ id: item.id, name: item.name, color: item.color })));
+    setRows(
+      list.map((item) => ({
+        id: item.id,
+        name: item.name,
+        color: item.color,
+        isHoliday: item.isHoliday
+      }))
+    );
   }
 
   useEffect(() => {
     void load().catch(() => setError(t('common.error')));
   }, [t]);
 
+  function setHoliday(index: number, checked: boolean) {
+    setRows((current) =>
+      current.map((row, rowIndex) => ({
+        ...row,
+        isHoliday: rowIndex === index ? checked : checked ? false : row.isHoliday
+      }))
+    );
+  }
+
   async function add() {
     if (!newRow.name.trim()) return;
     setBusy(true);
     try {
-      await apiPost('/categories', { name: newRow.name.trim(), color: newRow.color });
+      await apiPost('/categories', {
+        name: newRow.name.trim(),
+        color: newRow.color,
+        isHoliday: newRow.isHoliday
+      });
       setNewRow(blank);
       await load();
       setFlash(t('common.saved'));
@@ -47,7 +68,11 @@ export function CategoriesAdmin() {
     if (!row.id || !row.name.trim()) return;
     setBusy(true);
     try {
-      await apiPatch(`/categories/${row.id}`, { name: row.name.trim(), color: row.color });
+      await apiPatch(`/categories/${row.id}`, {
+        name: row.name.trim(),
+        color: row.color,
+        isHoliday: row.isHoliday
+      });
       await load();
       setFlash(t('common.saved'));
     } catch (err) {
@@ -85,6 +110,7 @@ export function CategoriesAdmin() {
               <tr>
                 <th>{t('admin.categoryName')}</th>
                 <th>{t('admin.categoryColor')}</th>
+                <th title={t('admin.categoryHolidayHint')}>{t('admin.categoryHoliday')}</th>
                 <th>{t('common.actions')}</th>
               </tr>
             </thead>
@@ -112,6 +138,14 @@ export function CategoriesAdmin() {
                       }}
                     />
                   </td>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={row.isHoliday}
+                      aria-label={t('admin.categoryHoliday')}
+                      onChange={(event) => setHoliday(index, event.target.checked)}
+                    />
+                  </td>
                   <td className="row-actions">
                     <button type="button" className="button small" disabled={busy} onClick={() => void save(row)}>
                       {t('common.save')}
@@ -135,6 +169,14 @@ export function CategoriesAdmin() {
                     type="color"
                     value={newRow.color}
                     onChange={(event) => setNewRow({ ...newRow, color: event.target.value })}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="checkbox"
+                    checked={newRow.isHoliday}
+                    aria-label={t('admin.categoryHoliday')}
+                    onChange={(event) => setNewRow({ ...newRow, isHoliday: event.target.checked })}
                   />
                 </td>
                 <td>

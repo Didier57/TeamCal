@@ -255,6 +255,9 @@ const fr: Record<string, string> = {
   'admin.categoriesTitle': 'Catégories',
   'admin.categoryName': 'Nom de la catégorie',
   'admin.categoryColor': 'Couleur',
+  'admin.categoryHoliday': 'Jours fériés',
+  'admin.categoryHolidayHint':
+    'Une seule catégorie peut être liée aux jours fériés. Les événements synchronisés depuis les calendriers ICS de jours fériés prendront cette catégorie.',
   'admin.addCategory': 'Ajouter une catégorie',
   'admin.deleteCategoryConfirm': 'Supprimer cette catégorie ? Les événements associés seront conservés sans catégorie.',
   'admin.smtpTitle': 'Configuration SMTP',
@@ -760,6 +763,9 @@ const en: Record<string, string> = {
   'admin.categoriesTitle': 'Categories',
   'admin.categoryName': 'Category name',
   'admin.categoryColor': 'Colour',
+  'admin.categoryHoliday': 'Public holidays',
+  'admin.categoryHolidayHint':
+    'Only one category can be linked to public holidays. Events synced from holiday ICS calendars will use this category.',
   'admin.addCategory': 'Add category',
   'admin.deleteCategoryConfirm': 'Delete this category? Related events are kept without category.',
   'admin.smtpTitle': 'SMTP configuration',
@@ -1264,6 +1270,9 @@ const de: Record<string, string> = {
   'admin.categoriesTitle': 'Kategorien',
   'admin.categoryName': 'Kategoriename',
   'admin.categoryColor': 'Farbe',
+  'admin.categoryHoliday': 'Feiertage',
+  'admin.categoryHolidayHint':
+    'Nur eine Kategorie kann mit Feiertagen verknüpft werden. Aus Feiertags-ICS-Kalendern synchronisierte Termine erhalten diese Kategorie.',
   'admin.addCategory': 'Kategorie hinzufügen',
   'admin.deleteCategoryConfirm': 'Diese Kategorie löschen? Termine bleiben ohne Kategorie erhalten.',
   'admin.smtpTitle': 'SMTP-Konfiguration',

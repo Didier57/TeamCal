@@ -200,6 +200,10 @@ ALTER TABLE events ADD COLUMN deleted_by TEXT;
   {
     id: 7,
     sql: `ALTER TABLE events ADD COLUMN rdates TEXT;`
+  },
+  {
+    id: 8,
+    sql: `ALTER TABLE categories ADD COLUMN is_holiday INTEGER NOT NULL DEFAULT 0;`
   }
 ];
 

@@ -168,6 +168,15 @@ export function holidayKey(country: string, entry: HolidayOccurrence): string {
   return `${country}:${entry.date}:${slug || 'holiday'}`;
 }
 
+function holidayCategoryId(db: DB): string | null {
+  const row = db
+    .prepare(
+      'SELECT id FROM categories WHERE is_holiday = 1 ORDER BY name COLLATE NOCASE LIMIT 1'
+    )
+    .get() as { id: string } | undefined;
+  return row?.id ?? null;
+}
+
 export function applyHolidayToCountryUsers(
   db: DB,
   country: string,
@@ -182,16 +191,18 @@ export function applyHolidayToCountryUsers(
        WHERE u.is_active = 1 AND u.country = ?`
     )
     .all(country) as { id: string; country: string; calendar_id: string }[];
+  const categoryId = holidayCategoryId(db);
   const findEvent = db.prepare('SELECT id FROM events WHERE calendar_id = ? AND holiday_key = ?');
   const updateEvent = db.prepare(
-    `UPDATE events SET title = ?, start_at = ?, end_at = ?, holiday_source_id = ?, status = 'confirmed',
+    `UPDATE events SET title = CASE WHEN TRIM(COALESCE(title, '')) = '' THEN ? ELSE title END,
+       start_at = ?, end_at = ?, holiday_source_id = ?, category_id = ?, status = 'confirmed',
        updated_at = ? WHERE id = ?`
   );
   const insertEvent = db.prepare(
     `INSERT INTO events (id, uid, calendar_id, owner_id, created_by, title, description, start_at, end_at,
        all_day, timezone, location, url, priority, visibility, category_id, rrule, recurrence_until,
        sequence, status, holiday_source_id, holiday_key, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 1, 'UTC', NULL, NULL, NULL, 'default', NULL, NULL, NULL,
+     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 1, 'UTC', NULL, NULL, NULL, 'default', ?, NULL, NULL,
        0, 'confirmed', ?, ?, ?, ?)`
   );
   let count = 0;
@@ -200,7 +211,7 @@ export function applyHolidayToCountryUsers(
       const now = nowIso();
       const existing = findEvent.get(user.calendar_id, key) as { id: string } | undefined;
       if (existing) {
-        updateEvent.run(title, date, date, country, now, existing.id);
+        updateEvent.run(title, date, date, country, categoryId, now, existing.id);
       } else {
         insertEvent.run(
           newId(),
@@ -211,6 +222,7 @@ export function applyHolidayToCountryUsers(
           title,
           date,
           date,
+          categoryId,
           country,
           key,
           now,
@@ -330,19 +342,21 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
           .all()
   ) as { id: string; country: string | null; calendar_id: string }[];
 
+  const categoryId = holidayCategoryId(db);
   const selectHolidays = db.prepare(
-    'SELECT id, holiday_key FROM events WHERE calendar_id = ? AND holiday_key IS NOT NULL'
+    'SELECT id, holiday_key, start_at, title FROM events WHERE calendar_id = ? AND holiday_key IS NOT NULL'
   );
   const deleteEvent = db.prepare('DELETE FROM events WHERE id = ?');
   const updateEvent = db.prepare(
-    `UPDATE events SET title = ?, start_at = ?, end_at = ?, holiday_source_id = ?, updated_at = ?
+    `UPDATE events SET title = CASE WHEN TRIM(COALESCE(title, '')) = '' THEN ? ELSE title END,
+       start_at = ?, end_at = ?, holiday_source_id = ?, holiday_key = ?, category_id = ?, updated_at = ?
      WHERE id = ?`
   );
   const insertEvent = db.prepare(
     `INSERT INTO events (id, uid, calendar_id, owner_id, created_by, title, description, start_at, end_at,
        all_day, timezone, location, url, priority, visibility, category_id, rrule, recurrence_until,
        sequence, status, holiday_source_id, holiday_key, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 1, 'UTC', NULL, NULL, NULL, 'default', NULL, NULL, NULL,
+     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 1, 'UTC', NULL, NULL, NULL, 'default', ?, NULL, NULL,
        0, 'confirmed', ?, ?, ?, ?)`
   );
 
@@ -353,18 +367,40 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
     const desired = country ? holidaysByCountry.get(country) ?? new Map<string, HolidayEntry>() : new Map();
 
     db.transaction(() => {
-      const existing = selectHolidays.all(user.calendar_id) as { id: string; holiday_key: string }[];
+      const existing = selectHolidays.all(user.calendar_id) as {
+        id: string;
+        holiday_key: string;
+        start_at: string;
+        title: string;
+      }[];
+      const existingByKey = new Map(existing.map((event) => [event.holiday_key, event]));
+      const matched = new Set<string>();
+      const existingByDate = new Map<string, string[]>();
       for (const event of existing) {
-        if (!desired.has(event.holiday_key)) {
-          deleteEvent.run(event.id);
-          result.deleted += 1;
-        }
+        const date = event.start_at.slice(0, 10);
+        const ids = existingByDate.get(date) ?? [];
+        ids.push(event.id);
+        existingByDate.set(date, ids);
       }
-      const existingByKey = new Map(existing.map((event) => [event.holiday_key, event.id]));
+
       for (const entry of desired.values()) {
-        const existingId = existingByKey.get(entry.key);
+        const exact = existingByKey.get(entry.key);
+        let existingId = exact?.id;
+        if (!existingId) {
+          existingId = (existingByDate.get(entry.date) ?? []).find((id) => !matched.has(id));
+        }
         if (existingId) {
-          updateEvent.run(entry.title, entry.date, entry.date, country, nowIso(), existingId);
+          updateEvent.run(
+            entry.title,
+            entry.date,
+            entry.date,
+            country,
+            entry.key,
+            categoryId,
+            nowIso(),
+            existingId
+          );
+          matched.add(existingId);
           result.updated += 1;
         } else {
           const now = nowIso();
@@ -377,12 +413,20 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
             entry.title,
             entry.date,
             entry.date,
+            categoryId,
             country,
             entry.key,
             now,
             now
           );
           result.created += 1;
+        }
+      }
+
+      for (const event of existing) {
+        if (!matched.has(event.id)) {
+          deleteEvent.run(event.id);
+          result.deleted += 1;
         }
       }
     })();
