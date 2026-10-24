@@ -3,7 +3,7 @@ import { apiGet, apiPost, apiPut, ApiError } from '../api';
 import { defaultThemeColors, useAuth } from '../app-context';
 import { languageLabel, useI18n } from '../i18n';
 import { countryLabel, EUROPEAN_COUNTRY_CODES } from '../countries';
-import type { CustomView, Language, ThemeColors, ThemeKind, User } from '../types';
+import type { CustomView, Language, PublicSettings, ThemeColors, ThemeKind, User } from '../types';
 import { ThemeColorEditor } from '../components/ThemeColorEditor';
 
 const timezones = [
@@ -25,7 +25,7 @@ const timezoneChoices = timezones.includes(browserTimeZone)
   : [browserTimeZone, ...timezones];
 
 export function PreferencesPage() {
-  const { user, settings, setUser, setTheme } = useAuth();
+  const { user, settings, setUser, setTheme, setSettings } = useAuth();
   const { t, errorMessage, setLanguage, locale } = useI18n();
   const [firstName, setFirstName] = useState(user?.firstName ?? '');
   const [lastName, setLastName] = useState(user?.lastName ?? '');
@@ -66,6 +66,18 @@ export function PreferencesPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    apiGet<PublicSettings>('/settings/public')
+      .then((value) => {
+        if (active) setSettings(value);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [setSettings]);
 
   useEffect(() => {
     let active = true;

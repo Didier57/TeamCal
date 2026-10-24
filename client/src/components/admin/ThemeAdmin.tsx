@@ -78,10 +78,6 @@ export function ThemeAdmin() {
             <span>{t('common.no')}</span>
           </label>
         </div>
-        <div className="theme-option-line">
-          <span>{t('theme.gradientBackgrounds')} :</span>
-          <span className="pill muted">{t('theme.notAvailable')}</span>
-        </div>
       </div>
 
       <div className="panel">

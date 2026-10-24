@@ -141,6 +141,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   useEffect(() => {
+    function refreshSettings() {
+      if (document.visibilityState !== 'visible') return;
+      apiGet<PublicSettings>('/settings/public')
+        .then((value) => setSettingsState(value))
+        .catch(() => undefined);
+    }
+    window.addEventListener('focus', refreshSettings);
+    document.addEventListener('visibilitychange', refreshSettings);
+    return () => {
+      window.removeEventListener('focus', refreshSettings);
+      document.removeEventListener('visibilitychange', refreshSettings);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!settings) return;
     const globalColors = settings.theme?.[theme] ?? {};
     const userColors =
