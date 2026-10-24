@@ -1412,6 +1412,10 @@ describe('TeamCal API', () => {
       .send({ endpoint });
     expect(unsubscribed.status).toBe(200);
     expect(db.prepare('SELECT COUNT(*) AS count FROM push_subscriptions').get()).toEqual({ count: 0 });
+
+    const testPush = await agent.post('/api/push/test').set('X-CSRF-Token', csrf).send({});
+    expect(testPush.status).toBe(200);
+    expect(testPush.body).toEqual({ subscriptions: 0, sent: 0, failed: 0 });
   });
 
   it('exports and restores the database while keeping the backup password', async () => {

@@ -73,13 +73,13 @@ function formatWhen(event: EventRow, timezone: string, language: string | null):
   }
 }
 
-function recipientsFor(db: DB, event: EventRow, actorId: string): PushRecipientRow[] {
+function recipientsFor(db: DB, event: EventRow): PushRecipientRow[] {
   const participantIds = (
     db.prepare('SELECT user_id FROM event_participants WHERE event_id = ?').all(event.id) as {
       user_id: string;
     }[]
   ).map((row) => row.user_id);
-  const ids = Array.from(new Set([event.owner_id, ...participantIds])).filter((id) => id !== actorId);
+  const ids = Array.from(new Set([event.owner_id, ...participantIds]));
   if (ids.length === 0) return [];
   return db
     .prepare(
@@ -96,23 +96,67 @@ function subscriptionsFor(db: DB, userId: string): PushSubscriptionRow[] {
     .all(userId) as PushSubscriptionRow[];
 }
 
+async function deliver(
+  db: DB,
+  subscription: PushSubscriptionRow,
+  payload: string
+): Promise<{ sent: boolean; statusCode: number | null }> {
+  try {
+    await webpush.sendNotification(
+      {
+        endpoint: subscription.endpoint,
+        keys: { p256dh: subscription.p256dh, auth: subscription.auth }
+      },
+      payload,
+      { TTL: 3600, urgency: 'normal' }
+    );
+    return { sent: true, statusCode: null };
+  } catch (error) {
+    const statusCode = (error as { statusCode?: number }).statusCode ?? null;
+    if (statusCode === 404 || statusCode === 410) {
+      db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(subscription.id);
+    } else {
+      logger.error('push_send_failed', {
+        endpoint: subscription.endpoint.slice(0, 60),
+        statusCode,
+        error: error instanceof Error ? error.message : String(error)
+      });
+    }
+    return { sent: false, statusCode };
+  }
+}
+
+function configureVapid(db: DB, settings: AppSettings) {
+  const keys = ensureVapidKeys(db);
+  const subject = settings.smtp.fromEmail
+    ? `mailto:${settings.smtp.fromEmail}`
+    : 'https://localhost';
+  webpush.setVapidDetails(subject, keys.publicKey, keys.privateKey);
+}
+
 export async function sendPushEvent(
   db: DB,
   settings: AppSettings,
-  event: EventRow,
-  actorId: string
+  event: EventRow
 ): Promise<void> {
-  const recipients = recipientsFor(db, event, actorId);
-  if (recipients.length === 0) return;
-  const keys = ensureVapidKeys(db);
-  const subject = settings.smtp.fromEmail ? `mailto:${settings.smtp.fromEmail}` : 'mailto:admin@localhost';
-  webpush.setVapidDetails(subject, keys.publicKey, keys.privateKey);
+  const recipients = recipientsFor(db, event);
+  if (recipients.length === 0) {
+    logger.info('push_skipped', { eventId: event.id, reason: 'no_recipients' });
+    return;
+  }
+  configureVapid(db, settings);
   const base = (settings.baseUrl || '').replace(/\/+$/, '');
   const dateKey = event.start_at.slice(0, 10);
   const url = `${base}/?date=${dateKey}`;
+  let sent = 0;
+  let failed = 0;
+  let missingSubscriptions = 0;
   for (const recipient of recipients) {
     const subscriptions = subscriptionsFor(db, recipient.id);
-    if (subscriptions.length === 0) continue;
+    if (subscriptions.length === 0) {
+      missingSubscriptions += 1;
+      continue;
+    }
     const payload = JSON.stringify({
       title: event.title,
       body: formatWhen(event, recipient.timezone || event.timezone || 'UTC', recipient.language),
@@ -121,27 +165,41 @@ export async function sendPushEvent(
       badge: '/icon-192.png'
     });
     for (const subscription of subscriptions) {
-      try {
-        await webpush.sendNotification(
-          {
-            endpoint: subscription.endpoint,
-            keys: { p256dh: subscription.p256dh, auth: subscription.auth }
-          },
-          payload,
-          { TTL: 3600, urgency: 'normal' }
-        );
-      } catch (error) {
-        const statusCode = (error as { statusCode?: number }).statusCode;
-        if (statusCode === 404 || statusCode === 410) {
-          db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(subscription.id);
-          continue;
-        }
-        logger.error('push_send_failed', {
-          userId: recipient.id,
-          statusCode: statusCode ?? null,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      }
+      const result = await deliver(db, subscription, payload);
+      if (result.sent) sent += 1;
+      else failed += 1;
     }
   }
+  logger.info('push_event_sent', {
+    eventId: event.id,
+    recipients: recipients.length,
+    sent,
+    failed,
+    missingSubscriptions
+  });
+}
+
+export async function sendTestPush(
+  db: DB,
+  settings: AppSettings,
+  userId: string
+): Promise<{ subscriptions: number; sent: number; failed: number }> {
+  const subscriptions = subscriptionsFor(db, userId);
+  if (subscriptions.length === 0) return { subscriptions: 0, sent: 0, failed: 0 };
+  configureVapid(db, settings);
+  const payload = JSON.stringify({
+    title: settings.appName,
+    body: 'Notification de test',
+    url: '/',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png'
+  });
+  let sent = 0;
+  let failed = 0;
+  for (const subscription of subscriptions) {
+    const result = await deliver(db, subscription, payload);
+    if (result.sent) sent += 1;
+    else failed += 1;
+  }
+  return { subscriptions: subscriptions.length, sent, failed };
 }

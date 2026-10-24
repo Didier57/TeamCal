@@ -456,6 +456,14 @@ const fr: Record<string, string> = {
     'Sur ordinateur, une notification s’affiche lorsque quelqu’un ajoute un événement dans vos calendriers. Sur mobile, installez l’application puis activez cette option pour recevoir les notifications push, même application fermée.',
   'prefs.notificationsBlocked':
     'Les notifications sont bloquées par le navigateur. Autorisez-les dans les paramètres du site.',
+  'prefs.pushFailed':
+    'Impossible d’activer les notifications push sur cet appareil. Vérifiez que l’application est installée et que les notifications sont autorisées.',
+  'prefs.pushTest': 'Envoyer une notification de test',
+  'prefs.pushTestSent': 'Notification de test envoyée. Vérifiez votre appareil.',
+  'prefs.pushTestFailed':
+    'Échec de l’envoi de la notification de test. Vérifiez l’installation de l’application et les autorisations.',
+  'prefs.pushNoSubscription':
+    'Aucun abonnement push enregistré pour cet appareil. Désactivez puis réactivez l’option.',
   'prefs.useGlobal': 'Utiliser le thème global',
   'prefs.dateFormat': 'Format de date personnel',
   'prefs.timeFormat': "Format d'heure personnel",
@@ -1001,6 +1009,14 @@ const en: Record<string, string> = {
     'On desktop, a notification appears when someone adds an event to your calendars. On mobile, install the app and enable this option to receive push notifications even when the app is closed.',
   'prefs.notificationsBlocked':
     'Notifications are blocked by the browser. Allow them in the site settings.',
+  'prefs.pushFailed':
+    'Could not enable push notifications on this device. Check that the app is installed and notifications are allowed.',
+  'prefs.pushTest': 'Send a test notification',
+  'prefs.pushTestSent': 'Test notification sent. Check your device.',
+  'prefs.pushTestFailed':
+    'Could not send the test notification. Check the app installation and permissions.',
+  'prefs.pushNoSubscription':
+    'No push subscription is stored for this device. Disable then re-enable the option.',
   'prefs.useGlobal': 'Use global theme',
   'prefs.dateFormat': 'Personal date format',
   'prefs.timeFormat': 'Personal time format',
@@ -1547,6 +1563,14 @@ const de: Record<string, string> = {
     'Am Computer erscheint eine Benachrichtigung, wenn jemand einen Termin in Ihren Kalendern hinzufügt. Installieren Sie die App auf dem Smartphone und aktivieren Sie diese Option, um Push-Benachrichtigungen auch bei geschlossener App zu erhalten.',
   'prefs.notificationsBlocked':
     'Benachrichtigungen sind vom Browser blockiert. Erlauben Sie sie in den Website-Einstellungen.',
+  'prefs.pushFailed':
+    'Push-Benachrichtigungen konnten auf diesem Gerät nicht aktiviert werden. Prüfen Sie, ob die App installiert und Benachrichtigungen erlaubt sind.',
+  'prefs.pushTest': 'Testbenachrichtigung senden',
+  'prefs.pushTestSent': 'Testbenachrichtigung gesendet. Prüfen Sie Ihr Gerät.',
+  'prefs.pushTestFailed':
+    'Die Testbenachrichtigung konnte nicht gesendet werden. Prüfen Sie Installation und Berechtigungen.',
+  'prefs.pushNoSubscription':
+    'Für dieses Gerät ist kein Push-Abonnement gespeichert. Deaktivieren und aktivieren Sie die Option erneut.',
   'prefs.useGlobal': 'Globales Design verwenden',
   'prefs.dateFormat': 'Persönliches Datumsformat',
   'prefs.timeFormat': 'Persönliches Zeitformat',

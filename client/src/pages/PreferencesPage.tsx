@@ -78,6 +78,8 @@ export function PreferencesPage() {
   });
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileFlash, setProfileFlash] = useState<string | null>(null);
+  const [pushError, setPushError] = useState<string | null>(null);
+  const [pushTest, setPushTest] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordFlash, setPasswordFlash] = useState<string | null>(null);
   const [feedFlash, setFeedFlash] = useState<string | null>(null);
@@ -117,6 +119,17 @@ export function PreferencesPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (
+      user?.notifyNewEvents &&
+      typeof Notification !== 'undefined' &&
+      Notification.permission === 'granted'
+    ) {
+      void ensurePushSubscription().catch(() => undefined);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.notifyNewEvents, settings?.vapidPublicKey]);
 
   if (!user || !settings) return null;
 
@@ -158,16 +171,12 @@ export function PreferencesPage() {
   }
 
   async function ensurePushSubscription() {
-    if (
-      typeof window === 'undefined' ||
-      !('serviceWorker' in navigator) ||
-      !('PushManager' in window) ||
-      !settings?.vapidPublicKey
-    ) {
-      return;
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      throw new Error('push_unsupported');
     }
+    if (!settings?.vapidPublicKey) throw new Error('push_unavailable');
     const registration = await serviceWorkerRegistration();
-    if (!registration) return;
+    if (!registration) throw new Error('service_worker_unavailable');
     let subscription = await registration.pushManager.getSubscription();
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
@@ -192,8 +201,13 @@ export function PreferencesPage() {
   }
 
   async function toggleNotifications(checked: boolean) {
+    setPushError(null);
+    setPushTest(null);
     if (!checked) {
       setNotifyNewEvents(false);
+      await apiPut<{ user: User }>('/auth/me/preferences', { notifyNewEvents: false })
+        .then((response) => setUser(response.user))
+        .catch(() => undefined);
       await removePushSubscription().catch(() => undefined);
       return;
     }
@@ -212,7 +226,30 @@ export function PreferencesPage() {
     }
     setNotificationsBlocked(false);
     setNotifyNewEvents(true);
-    await ensurePushSubscription().catch(() => undefined);
+    try {
+      const response = await apiPut<{ user: User }>('/auth/me/preferences', {
+        notifyNewEvents: true
+      });
+      setUser(response.user);
+      await ensurePushSubscription();
+    } catch (err) {
+      setPushError(err instanceof ApiError ? errorMessage(err.code) : t('prefs.pushFailed'));
+    }
+  }
+
+  async function testPush() {
+    setPushError(null);
+    setPushTest(null);
+    try {
+      const result = await apiPost<{ subscriptions: number; sent: number; failed: number }>(
+        '/push/test'
+      );
+      if (result.subscriptions === 0) setPushError(t('prefs.pushNoSubscription'));
+      else if (result.sent > 0) setPushTest(t('prefs.pushTestSent'));
+      else setPushError(t('prefs.pushTestFailed'));
+    } catch {
+      setPushError(t('prefs.pushTestFailed'));
+    }
   }
 
   async function saveProfile(event: FormEvent) {
@@ -404,6 +441,15 @@ export function PreferencesPage() {
           <p className="hint">
             {notificationsBlocked ? t('prefs.notificationsBlocked') : t('prefs.notificationsHint')}
           </p>
+          {pushTest && <div className="alert success">{pushTest}</div>}
+          {pushError && <div className="alert error">{pushError}</div>}
+          {notifyNewEvents && (
+            <div className="row-actions">
+              <button type="button" className="button" onClick={() => void testPush()}>
+                {t('prefs.pushTest')}
+              </button>
+            </div>
+          )}
         </div>
         {settings.allowUserColors && (
           <div className="theme-user-block">

@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../lib/auth';
+import { sendTestPush } from '../lib/push';
+import { logger } from '../lib/logger';
+import { SettingsStore } from '../settings';
 import { asyncHandler, newId, nowIso } from '../lib/util';
 
 const subscriptionSchema = z.object({
@@ -45,7 +48,22 @@ export function pushRoutes(): Router {
           now,
           now
         );
+      logger.info('push_subscribed', {
+        userId: req.user!.id,
+        endpoint: body.subscription.endpoint.slice(0, 60)
+      });
       res.json({ ok: true });
+    })
+  );
+
+  router.post(
+    '/test',
+    requireAuth,
+    asyncHandler(async (req, res) => {
+      const settings = new SettingsStore(req.db).get();
+      const result = await sendTestPush(req.db, settings, req.user!.id);
+      logger.info('push_test', { userId: req.user!.id, ...result });
+      res.json(result);
     })
   );
 

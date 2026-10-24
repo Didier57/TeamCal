@@ -632,7 +632,7 @@ export function eventRoutes(): Router {
       notifyEvent(req.db, settings, event, 'created').catch((error) =>
         logger.error('notify_failed', { error: error instanceof Error ? error.message : String(error) })
       );
-      sendPushEvent(req.db, settings, event, req.user!.id).catch((error) =>
+      sendPushEvent(req.db, settings, event).catch((error) =>
         logger.error('push_failed', { error: error instanceof Error ? error.message : String(error) })
       );
       const participants = (
