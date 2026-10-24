@@ -20,6 +20,7 @@ export interface HolidaySyncResult {
 
 interface HolidayEntry extends HolidayOccurrence {
   key: string;
+  sourceName?: string;
 }
 
 interface HolidayAdjustmentRow {
@@ -289,7 +290,9 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
         const ics = await fetchIcs(source.url);
         for (const occurrence of parseHolidayIcs(ics)) {
           const key = holidayKey(country, occurrence);
-          if (!entries.has(key)) entries.set(key, { ...occurrence, key });
+          if (!entries.has(key)) {
+            entries.set(key, { ...occurrence, key, sourceName: source.name || country });
+          }
         }
       } catch (error) {
         failed = true;
@@ -349,14 +352,15 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
   const deleteEvent = db.prepare('DELETE FROM events WHERE id = ?');
   const updateEvent = db.prepare(
     `UPDATE events SET title = CASE WHEN TRIM(COALESCE(title, '')) = '' THEN ? ELSE title END,
-       start_at = ?, end_at = ?, holiday_source_id = ?, holiday_key = ?, category_id = ?, updated_at = ?
+       description = COALESCE(?, description), start_at = ?, end_at = ?, holiday_source_id = ?,
+       holiday_key = ?, category_id = ?, updated_at = ?
      WHERE id = ?`
   );
   const insertEvent = db.prepare(
     `INSERT INTO events (id, uid, calendar_id, owner_id, created_by, title, description, start_at, end_at,
        all_day, timezone, location, url, priority, visibility, category_id, rrule, recurrence_until,
        sequence, status, holiday_source_id, holiday_key, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, 1, 'UTC', NULL, NULL, NULL, 'default', ?, NULL, NULL,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'UTC', NULL, NULL, NULL, 'default', ?, NULL, NULL,
        0, 'confirmed', ?, ?, ?, ?)`
   );
 
@@ -392,6 +396,7 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
         if (existingId) {
           updateEvent.run(
             entry.title,
+            entry.sourceName ?? null,
             entry.date,
             entry.date,
             country,
@@ -411,6 +416,7 @@ async function runSync(db: DB, settings: AppSettings, onlyUserId?: string): Prom
             user.id,
             user.id,
             entry.title,
+            entry.sourceName ?? null,
             entry.date,
             entry.date,
             categoryId,

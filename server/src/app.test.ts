@@ -609,6 +609,7 @@ describe('TeamCal API', () => {
       );
       expect(events.body).toHaveLength(1);
       expect(events.body[0].title).toBe('Fête source');
+      expect(events.body[0].description).toBe('FR');
       expect(events.body[0].categoryId).toBe(category.body.id);
 
       const list = await agent.get('/api/holidays/admin');
@@ -626,7 +627,15 @@ describe('TeamCal API', () => {
       );
       expect(events.body).toHaveLength(1);
       expect(events.body[0].title).toBe('Fête nationale');
+      expect(events.body[0].description).toBe('FR');
       expect(events.body[0].categoryId).toBe(category.body.id);
+
+      db.prepare("UPDATE events SET description = '' WHERE holiday_key IS NOT NULL").run();
+      await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
+      events = await agent.get(
+        '/api/events?start=2026-08-01T00:00:00.000Z&end=2026-09-01T00:00:00.000Z'
+      );
+      expect(events.body[0].description).toBe('FR');
 
       db.prepare('UPDATE events SET title = ? WHERE holiday_key IS NOT NULL').run('');
       await agent.post('/api/holidays/sync').set('X-CSRF-Token', csrf).send({});
