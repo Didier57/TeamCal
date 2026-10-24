@@ -167,6 +167,23 @@ export function backupRoutes(): Router {
   );
 
   router.delete(
+    '/smb/password',
+    requireAuth,
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const store = new SettingsStore(req.db);
+      store.set({ backup: { password: '' } });
+      audit(req.db, {
+        userId: req.user!.id,
+        action: 'backup.password_cleared',
+        entity: 'settings',
+        ip: req.ip
+      });
+      res.json({ ok: true });
+    })
+  );
+
+  router.delete(
     '/smb/:name',
     requireAuth,
     requireAdmin,

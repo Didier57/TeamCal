@@ -1278,6 +1278,21 @@ label small,
   padding: 6px;
 }
 
+.backup-password-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.backup-password-control input {
+  flex: 1;
+  min-width: 0;
+}
+
+.backup-password-control .button {
+  white-space: nowrap;
+}
+
 .backup-enabled {
   margin: 14px 0;
 }

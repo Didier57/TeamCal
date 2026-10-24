@@ -351,6 +351,10 @@ const fr: Record<string, string> = {
   'admin.backupUsername': 'Utilisateur',
   'admin.backupPassword': 'Mot de passe',
   'admin.backupPasswordKeep': 'Laisser vide pour conserver le mot de passe actuel',
+  'admin.backupClearPassword': 'Supprimer le mot de passe',
+  'admin.backupClearPasswordConfirm':
+    'Supprimer le mot de passe SMB enregistré ? Les sauvegardes automatiques échoueront tant qu’un nouveau mot de passe ne sera pas saisi.',
+  'admin.backupPasswordCleared': 'Mot de passe SMB supprimé.',
   'admin.backupDomain': 'Domaine (optionnel)',
   'admin.backupFolder': 'Sous-dossier sur le partage (optionnel)',
   'admin.backupEnabled': 'Activer la sauvegarde automatique',
@@ -827,6 +831,10 @@ const en: Record<string, string> = {
   'admin.backupUsername': 'Username',
   'admin.backupPassword': 'Password',
   'admin.backupPasswordKeep': 'Leave empty to keep the current password',
+  'admin.backupClearPassword': 'Clear password',
+  'admin.backupClearPasswordConfirm':
+    'Clear the saved SMB password? Automatic backups will fail until a new password is entered.',
+  'admin.backupPasswordCleared': 'SMB password cleared.',
   'admin.backupDomain': 'Domain (optional)',
   'admin.backupFolder': 'Subfolder on the share (optional)',
   'admin.backupEnabled': 'Enable automatic backup',
@@ -1304,6 +1312,10 @@ const de: Record<string, string> = {
   'admin.backupUsername': 'Benutzername',
   'admin.backupPassword': 'Passwort',
   'admin.backupPasswordKeep': 'Leer lassen, um das aktuelle Passwort zu behalten',
+  'admin.backupClearPassword': 'Passwort löschen',
+  'admin.backupClearPasswordConfirm':
+    'Das gespeicherte SMB-Passwort löschen? Automatische Sicherungen schlagen fehl, bis ein neues Passwort eingegeben wird.',
+  'admin.backupPasswordCleared': 'SMB-Passwort gelöscht.',
   'admin.backupDomain': 'Domäne (optional)',
   'admin.backupFolder': 'Unterordner auf der Freigabe (optional)',
   'admin.backupEnabled': 'Automatische Sicherung aktivieren',

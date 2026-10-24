@@ -877,6 +877,14 @@ describe('TeamCal API', () => {
     expect(new SettingsStore(db).get().backup.password).toBe('Secret123!');
     const me = await admin.get('/api/auth/me');
     expect(me.status).toBe(200);
+
+    const cleared = await admin
+      .delete('/api/backups/smb/password')
+      .set('X-CSRF-Token', csrf);
+    expect(cleared.status).toBe(200);
+    expect(new SettingsStore(db).get().backup.password).toBe('');
+    const masked = await admin.get('/api/settings');
+    expect(masked.body.backup.hasPassword).toBe(false);
   });
 
   it('prevents non-admins from reading administration settings', async () => {

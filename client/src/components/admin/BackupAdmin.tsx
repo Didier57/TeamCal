@@ -103,6 +103,30 @@ export function BackupAdmin() {
     }
   }
 
+  async function clearPassword() {
+    if (!settings?.backup.hasPassword) return;
+    if (!window.confirm(t('admin.backupClearPasswordConfirm'))) return;
+    setBusy(true);
+    setError(null);
+    setFlash(null);
+    try {
+      await apiDelete('/backups/smb/password');
+      setSettings((current) =>
+        current
+          ? {
+              ...current,
+              backup: { ...current.backup, password: '', hasPassword: false }
+            }
+          : current
+      );
+      setFlash(t('admin.backupPasswordCleared'));
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function testConnection() {
     setTesting(true);
     setError(null);
@@ -256,12 +280,24 @@ export function BackupAdmin() {
           </label>
           <label>
             <span>{t('admin.backupPassword')}</span>
-            <input
-              type="password"
-              value={settings.backup.password}
-              placeholder={settings.backup.hasPassword ? '********' : ''}
-              onChange={(event) => updateBackup({ password: event.target.value })}
-            />
+            <div className="backup-password-control">
+              <input
+                type="password"
+                value={settings.backup.password}
+                placeholder={settings.backup.hasPassword ? '********' : ''}
+                onChange={(event) => updateBackup({ password: event.target.value })}
+              />
+              {settings.backup.hasPassword && (
+                <button
+                  type="button"
+                  className="button small danger"
+                  disabled={busy}
+                  onClick={() => void clearPassword()}
+                >
+                  {t('admin.backupClearPassword')}
+                </button>
+              )}
+            </div>
             <small>{t('admin.backupPasswordKeep')}</small>
           </label>
           <label>
