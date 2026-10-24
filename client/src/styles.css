@@ -2205,6 +2205,18 @@ label small,
   white-space: nowrap;
 }
 
+.event-flag {
+  display: inline-block;
+  width: 1.15em;
+  height: 0.85em;
+  margin-right: 4px;
+  vertical-align: -0.05em;
+  border-radius: 2px;
+  background-size: cover;
+  background-position: center;
+  flex: none;
+}
+
 .planning-event:hover {
   filter: brightness(1.06);
 }

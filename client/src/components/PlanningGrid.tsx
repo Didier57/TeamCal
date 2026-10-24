@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import 'flag-icons/css/flag-icons.min.css';
 import { countryLabel } from '../countries';
 import { useI18n } from '../i18n';
 import { addDaysToDateKey, toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
@@ -51,10 +52,10 @@ function pad(value: number): string {
   return value.toString().padStart(2, '0');
 }
 
-function countryFlag(code: string): string {
-  const upper = code.toUpperCase();
-  if (!/^[A-Z]{2}$/.test(upper)) return '';
-  return String.fromCodePoint(...[...upper].map((char) => 0x1f1e6 + char.charCodeAt(0) - 65));
+function CountryFlag({ code }: { code: string }) {
+  const lower = code.toLowerCase();
+  if (!/^[a-z]{2}$/.test(lower)) return null;
+  return <span className={`fi fi-${lower} event-flag`} aria-hidden="true" />;
 }
 
 function dateKeyOf(date: Date, timeZone: string): string {
@@ -248,9 +249,13 @@ export function PlanningGrid({
     return description ? `${heading}\n\n${description}` : heading;
   }
 
-  function displayTitle(occurrence: Occurrence): string {
-    const flag = occurrence.holidayCountry ? countryFlag(occurrence.holidayCountry) : '';
-    return flag ? `${flag} ${occurrence.title}` : occurrence.title;
+  function displayTitle(occurrence: Occurrence) {
+    return (
+      <>
+        {occurrence.holidayCountry && <CountryFlag code={occurrence.holidayCountry} />}
+        {occurrence.title}
+      </>
+    );
   }
 
   function chip(occurrence: Occurrence) {
