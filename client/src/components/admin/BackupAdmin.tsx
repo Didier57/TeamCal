@@ -237,7 +237,6 @@ export function BackupAdmin() {
             <span>{t('admin.backupHost')}</span>
             <input
               value={settings.backup.host}
-              placeholder="10.1.1.65"
               onChange={(event) => updateBackup({ host: event.target.value })}
             />
           </label>
@@ -245,7 +244,6 @@ export function BackupAdmin() {
             <span>{t('admin.backupShare')}</span>
             <input
               value={settings.backup.share}
-              placeholder="OPNSENSE-BACKUP"
               onChange={(event) => updateBackup({ share: event.target.value })}
             />
           </label>
@@ -277,7 +275,6 @@ export function BackupAdmin() {
             <span>{t('admin.backupFolder')}</span>
             <input
               value={settings.backup.folder}
-              placeholder="SSP"
               onChange={(event) => updateBackup({ folder: event.target.value })}
             />
           </label>
