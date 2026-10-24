@@ -1,4 +1,4 @@
-import SMB2 from '@marsaud/smb2';
+import SMB2 from 'v9u-smb2';
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';

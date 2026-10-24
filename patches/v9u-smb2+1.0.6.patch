@@ -1,0 +1,15 @@
+diff --git a/node_modules/v9u-smb2/lib/messages/session_setup_step2.js b/node_modules/v9u-smb2/lib/messages/session_setup_step2.js
+index 378bb40..c8d4605 100644
+--- a/node_modules/v9u-smb2/lib/messages/session_setup_step2.js
++++ b/node_modules/v9u-smb2/lib/messages/session_setup_step2.js
+@@ -14,7 +14,9 @@ module.exports = message({
+         Buffer: ntlm.encodeType3(
+           connection.nonce,
+           connection.username,
+-          connection.password
++          connection.password,
++          '',
++          connection.domain || (connection.nonce && connection.nonce.targetName) || ''
+         ),
+       },
+     });

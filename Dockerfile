@@ -6,6 +6,7 @@ RUN apt-get update \
 COPY package.json package-lock.json ./
 COPY server/package.json server/package.json
 COPY client/package.json client/package.json
+COPY patches ./patches
 RUN npm ci --no-audit --no-fund
 
 FROM base AS build
