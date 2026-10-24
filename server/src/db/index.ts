@@ -204,6 +204,13 @@ ALTER TABLE events ADD COLUMN deleted_by TEXT;
   {
     id: 8,
     sql: `ALTER TABLE categories ADD COLUMN is_holiday INTEGER NOT NULL DEFAULT 0;`
+  },
+  {
+    id: 9,
+    sql: `
+ALTER TABLE users ADD COLUMN password_token TEXT;
+ALTER TABLE users ADD COLUMN password_token_expires_at TEXT;
+`
   }
 ];
 

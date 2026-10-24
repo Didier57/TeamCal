@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiGet, apiPatch, apiPost, ApiError } from '../../api';
+import { apiDelete, apiGet, apiPatch, apiPost, ApiError } from '../../api';
 import { useAuth } from '../../app-context';
 import { languageLabel, useI18n } from '../../i18n';
 import { countryLabel, EUROPEAN_COUNTRY_CODES } from '../../countries';
@@ -11,7 +11,6 @@ interface FormState {
   firstName: string;
   lastName: string;
   email: string;
-  password: string;
   language: Language;
   timezone: string;
   country: string;
@@ -25,13 +24,43 @@ const empty: FormState = {
   firstName: '',
   lastName: '',
   email: '',
-  password: '',
   language: 'fr',
   timezone: '',
   country: '',
   isAdmin: false,
   isActive: true
 };
+
+type ActionIconName = 'edit' | 'send' | 'userX' | 'userCheck' | 'trash';
+
+function ActionIcon({ name }: { name: ActionIconName }) {
+  const paths: Record<ActionIconName, React.ReactNode> = {
+    edit: <path d="M4 20h4l10-10-4-4L4 16v4zm12.7-12.7 1.6-1.6a1 1 0 0 0 0-1.4l-1.6-1.6a1 1 0 0 0-1.4 0l-1.6 1.6 3 3z" />,
+    send: <path d="M3 11.5 21 3l-8.5 18-2.4-7.1L3 11.5zm7.1 2.4L21 3" />,
+    userX: (
+      <>
+        <circle cx="9" cy="8" r="3.2" />
+        <path d="M3.5 20c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2M16 8.5l5 5m0-5-5 5" />
+      </>
+    ),
+    userCheck: (
+      <>
+        <circle cx="9" cy="8" r="3.2" />
+        <path d="M3.5 20c0-3 2.5-5.2 5.5-5.2s5.5 2.2 5.5 5.2M15.5 10.5l2.2 2.2 4-4.2" />
+      </>
+    ),
+    trash: (
+      <>
+        <path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v6m4-6v6" />
+      </>
+    )
+  };
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {paths[name]}
+    </svg>
+  );
+}
 
 const timezones = [
   '',
@@ -49,11 +78,10 @@ const timezones = [
 
 export function UsersAdmin() {
   const { t, errorMessage, locale } = useI18n();
-  const { refresh } = useAuth();
+  const { refresh, user: currentUser } = useAuth();
+  const currentUserId = currentUser?.id;
   const [users, setUsers] = useState<User[]>([]);
   const [form, setForm] = useState<FormState | null>(null);
-  const [resetFor, setResetFor] = useState<User | null>(null);
-  const [resetPassword, setResetPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -79,7 +107,6 @@ export function UsersAdmin() {
       firstName: user.firstName,
       lastName: user.lastName,
       email: user.email ?? '',
-      password: '',
       language: user.language,
       timezone: user.timezone ?? '',
       country: user.country ?? '',
@@ -107,18 +134,17 @@ export function UsersAdmin() {
         });
         setFlash(t('admin.userUpdated'));
       } else {
-        await apiPost('/users', {
+        const created = await apiPost<User & { emailSent?: boolean }>('/users', {
           username: form.username,
           firstName: form.firstName,
           lastName: form.lastName,
           email: form.email,
-          password: form.password,
           language: form.language,
           timezone: form.timezone || undefined,
           country: form.country || undefined,
           isAdmin: form.isAdmin
         });
-        setFlash(t('admin.userCreated'));
+        setFlash(created.emailSent ? t('admin.inviteSent') : t('admin.userCreated'));
       }
       setForm(null);
       await load();
@@ -141,15 +167,27 @@ export function UsersAdmin() {
     }
   }
 
-  async function submitReset() {
-    if (!resetFor) return;
+  async function sendInvite(user: User) {
     setBusy(true);
     setError(null);
     try {
-      await apiPost(`/users/${resetFor.id}/password`, { newPassword: resetPassword });
-      setFlash(t('admin.passwordReset'));
-      setResetFor(null);
-      setResetPassword('');
+      const result = await apiPost<{ ok: boolean; emailSent: boolean }>(`/users/${user.id}/invite`, {});
+      setFlash(result.emailSent ? t('admin.inviteSent') : t('admin.inviteFailed'));
+    } catch (err) {
+      setError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function removeUser(user: User) {
+    if (!window.confirm(t('admin.deleteConfirm'))) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await apiDelete(`/users/${user.id}`);
+      setFlash(t('admin.userDeleted'));
+      await load();
     } catch (err) {
       setError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
     } finally {
@@ -208,25 +246,43 @@ export function UsersAdmin() {
                     : '—'}
                 </td>
                 <td className="row-actions">
-                  <button type="button" className="button small" onClick={() => startEdit(user)}>
-                    {t('common.edit')}
-                  </button>
                   <button
                     type="button"
-                    className="button small"
-                    onClick={() => {
-                      setResetFor(user);
-                      setResetPassword('');
-                    }}
+                    className="icon-button action-edit"
+                    title={t('common.edit')}
+                    aria-label={t('common.edit')}
+                    onClick={() => startEdit(user)}
                   >
-                    {t('admin.resetPassword')}
+                    <ActionIcon name="edit" />
                   </button>
                   <button
                     type="button"
-                    className={`button small ${user.isActive ? 'danger' : ''}`}
+                    className="icon-button action-invite"
+                    title={t('admin.invite')}
+                    aria-label={t('admin.invite')}
+                    disabled={busy || !user.isActive}
+                    onClick={() => void sendInvite(user)}
+                  >
+                    <ActionIcon name="send" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button action-toggle"
+                    title={user.isActive ? t('admin.deactivate') : t('admin.activate')}
+                    aria-label={user.isActive ? t('admin.deactivate') : t('admin.activate')}
                     onClick={() => void toggleActive(user)}
                   >
-                    {user.isActive ? t('admin.deactivate') : t('admin.activate')}
+                    <ActionIcon name={user.isActive ? 'userX' : 'userCheck'} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button action-delete"
+                    title={t('admin.deleteUser')}
+                    aria-label={t('admin.deleteUser')}
+                    disabled={busy || user.id === currentUserId}
+                    onClick={() => void removeUser(user)}
+                  >
+                    <ActionIcon name="trash" />
                   </button>
                 </td>
               </tr>
@@ -262,18 +318,11 @@ export function UsersAdmin() {
                 type="email"
                 value={form.email}
                 onChange={(event) => setForm({ ...form, email: event.target.value })}
+                required
               />
             </label>
             {!form.id && (
-              <label>
-                <span>{t('common.password')}</span>
-                <input
-                  type="password"
-                  value={form.password}
-                  onChange={(event) => setForm({ ...form, password: event.target.value })}
-                  minLength={8}
-                />
-              </label>
+              <p className="muted form-note">{t('admin.inviteHint')}</p>
             )}
             <label>
               <span>{t('common.language')}</span>
@@ -333,47 +382,6 @@ export function UsersAdmin() {
             <button type="button" className="button ghost" onClick={() => setForm(null)}>
               {t('common.cancel')}
             </button>
-          </div>
-        </div>
-      )}
-
-      {resetFor && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={() => setResetFor(null)}>
-          <div className="modal small" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="modal-header">
-              <h2>{t('admin.resetPassword')}</h2>
-              <button type="button" className="icon-button" onClick={() => setResetFor(null)}>
-                ×
-              </button>
-            </div>
-            <div className="modal-body form">
-              <p>
-                {resetFor.firstName} {resetFor.lastName} ({resetFor.username})
-              </p>
-              <label>
-                <span>{t('admin.newPassword')}</span>
-                <input
-                  type="password"
-                  value={resetPassword}
-                  onChange={(event) => setResetPassword(event.target.value)}
-                  minLength={8}
-                />
-              </label>
-              {error && <div className="alert error">{error}</div>}
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="button ghost" onClick={() => setResetFor(null)}>
-                {t('common.cancel')}
-              </button>
-              <button
-                type="button"
-                className="button primary"
-                disabled={busy || resetPassword.length < 8}
-                onClick={() => void submitReset()}
-              >
-                {t('common.save')}
-              </button>
-            </div>
           </div>
         </div>
       )}

@@ -1114,11 +1114,12 @@ describe('TeamCal API', () => {
       .send({ firstName: 'Logged' });
     expect(updated.status).toBe(200);
 
-    const reset = await agent
-      .post(`/api/users/${userId}/password`)
+    const invite = await agent
+      .post(`/api/users/${userId}/invite`)
       .set('X-CSRF-Token', csrf)
-      .send({ newPassword: 'NewPassword123!' });
-    expect(reset.status).toBe(200);
+      .send({});
+    expect(invite.status).toBe(200);
+    expect(invite.body).toEqual({ ok: true, emailSent: false });
 
     const settings = await agent
       .put('/api/settings')
@@ -1136,7 +1137,7 @@ describe('TeamCal API', () => {
     const actions = report.body.entries.map((entry: any) => entry.action);
     expect(actions).toContain('user.created');
     expect(actions).toContain('user.updated');
-    expect(actions).toContain('user.password_reset');
+    expect(actions).toContain('user.invited');
     expect(actions).toContain('settings.updated');
     expect(actions).toContain('auth.login_failed');
     expect(actions).not.toContain('event.created');
@@ -1177,10 +1178,140 @@ describe('TeamCal API', () => {
     const userAgent = request.agent(app);
     const login = await userAgent
       .post('/api/auth/login')
-      .send({ username: 'loguser', password: 'NewPassword123!' });
+      .send({ username: 'loguser', password: 'Password123!' });
     expect(login.status).toBe(200);
     const forbidden = await userAgent.get('/api/reports/system');
     expect(forbidden.status).toBe(403);
+  });
+
+  it('creates users without a password and lets them set one from the invite token', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const created = await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'newbie',
+        email: 'newbie@example.com',
+        firstName: 'New',
+        lastName: 'Bie',
+        language: 'fr'
+      });
+    expect(created.status).toBe(201);
+    expect(created.body.emailSent).toBe(false);
+
+    const row = db
+      .prepare('SELECT password_token, password_token_expires_at FROM users WHERE id = ?')
+      .get(created.body.id) as { password_token: string; password_token_expires_at: string };
+    expect(row.password_token).toBeTruthy();
+    expect(new Date(row.password_token_expires_at).getTime()).toBeGreaterThan(Date.now());
+
+    const check = await request(app).get(`/api/auth/reset/${row.password_token}`);
+    expect(check.status).toBe(200);
+    expect(check.body.valid).toBe(true);
+    expect(check.body.username).toBe('newbie');
+
+    const reset = await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token: row.password_token, password: 'FreshPassword123!' });
+    expect(reset.status).toBe(200);
+
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'newbie', password: 'FreshPassword123!' });
+    expect(login.status).toBe(200);
+
+    const reuse = await request(app).get(`/api/auth/reset/${row.password_token}`);
+    expect(reuse.body.valid).toBe(false);
+  });
+
+  it('sends a password reset link and invalidates it on login', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'forgetful',
+        email: 'forgetful@example.com',
+        password: 'Password123!'
+      });
+
+    const unknown = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: 'nobody@example.com' });
+    expect(unknown.status).toBe(200);
+    expect(unknown.body).toEqual({ ok: true });
+
+    const forgot = await request(app)
+      .post('/api/auth/forgot-password')
+      .send({ email: 'forgetful@example.com' });
+    expect(forgot.status).toBe(200);
+    expect(forgot.body).toEqual({ ok: true });
+
+    const row = db
+      .prepare('SELECT password_token FROM users WHERE username = ?')
+      .get('forgetful') as { password_token: string };
+    expect(row.password_token).toBeTruthy();
+
+    const login = await request(app)
+      .post('/api/auth/login')
+      .send({ username: 'forgetful', password: 'Password123!' });
+    expect(login.status).toBe(200);
+
+    const cleared = db
+      .prepare('SELECT password_token FROM users WHERE username = ?')
+      .get('forgetful') as { password_token: string | null };
+    expect(cleared.password_token).toBeNull();
+
+    const check = await request(app).get(`/api/auth/reset/${row.password_token}`);
+    expect(check.body.valid).toBe(false);
+  });
+
+  it('deletes users with their events and refuses self deletion', async () => {
+    const { agent, csrf, userId: adminId } = await setupAdmin(app);
+    const created = await agent
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        username: 'bob',
+        email: 'bob@example.com',
+        password: 'Password123!'
+      });
+    expect(created.status).toBe(201);
+    const bobId = created.body.id as string;
+
+    const bob = request.agent(app);
+    const bobLogin = await bob.post('/api/auth/login').send({ username: 'bob', password: 'Password123!' });
+    const bobCsrf = bobLogin.body.csrfToken as string;
+    const calendars = await bob.get('/api/calendars');
+    const calendarId = calendars.body[0].id as string;
+    const event = await bob.post('/api/events').set('X-CSRF-Token', bobCsrf).send({
+      calendarId,
+      title: 'Bob event',
+      start: '2027-02-01T09:00:00.000Z',
+      end: '2027-02-01T10:00:00.000Z'
+    });
+    expect(event.status).toBe(201);
+
+    const selfDelete = await agent
+      .delete(`/api/users/${adminId}`)
+      .set('X-CSRF-Token', csrf);
+    expect(selfDelete.status).toBe(400);
+    expect(selfDelete.body.error).toBe('cannot_delete_self');
+
+    const deleted = await agent
+      .delete(`/api/users/${bobId}`)
+      .set('X-CSRF-Token', csrf);
+    expect(deleted.status).toBe(200);
+    expect(deleted.body).toEqual({ ok: true });
+
+    const remaining = db
+      .prepare('SELECT COUNT(*) AS count FROM events WHERE owner_id = ?')
+      .get(bobId) as { count: number };
+    expect(remaining.count).toBe(0);
+    expect(db.prepare('SELECT id FROM users WHERE id = ?').get(bobId)).toBeUndefined();
+
+    const report = await agent.get('/api/reports/system');
+    expect(report.body.entries.some((entry: any) => entry.action === 'user.deleted')).toBe(true);
   });
 
   it('exports and restores the database while keeping the backup password', async () => {

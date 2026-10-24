@@ -297,6 +297,52 @@ label small,
   color: var(--color-primary);
 }
 
+.alert.success {
+  background: color-mix(in srgb, #2e9e5b 10%, var(--color-surface));
+  border-color: color-mix(in srgb, #2e9e5b 40%, transparent);
+  color: #2e9e5b;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-primary);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-button:hover {
+  text-decoration: none;
+}
+
+.form-note {
+  margin: 0;
+  font-size: 13px;
+}
+
+.action-edit {
+  color: var(--color-primary);
+}
+
+.action-invite {
+  color: #2e9e5b;
+}
+
+.action-toggle {
+  color: #b7791f;
+}
+
+.action-delete {
+  color: var(--danger);
+}
+
+.icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .splash {
   min-height: 100vh;
   display: grid;

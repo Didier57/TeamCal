@@ -10,6 +10,7 @@ import { ImportAdmin } from './components/admin/ImportAdmin';
 import { ReportAuditPage } from './pages/ReportAuditPage';
 import { ReportSystemPage } from './pages/ReportSystemPage';
 import { LoginPage } from './pages/LoginPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 import { SetupPage } from './pages/SetupPage';
 
 export function App() {
@@ -23,7 +24,14 @@ export function App() {
     );
   }
   if (needsSetup) return <SetupPage />;
-  if (!user) return <LoginPage />;
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </Routes>
+    );
+  }
 
   return (
     <Routes>

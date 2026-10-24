@@ -238,6 +238,87 @@ export async function notifyEvent(
   }
 }
 
+export type AccountMailKind = 'invite' | 'reset';
+
+const accountTexts: Record<string, { subject: string; intro: string; action: string; hint: string; footer: string; app: string }> = {
+  fr: {
+    subject: 'Invitation à créer votre compte',
+    intro: 'Un compte a été créé pour vous. Cliquez sur le bouton ci-dessous pour choisir votre mot de passe.',
+    action: 'Créer mon mot de passe',
+    hint: 'Ce lien expire dans 3 jours.',
+    footer: 'Cet e-mail a été envoyé automatiquement par TeamCal.',
+    app: 'Application'
+  },
+  en: {
+    subject: 'Invitation to create your account',
+    intro: 'An account has been created for you. Click the button below to choose your password.',
+    action: 'Create my password',
+    hint: 'This link expires in 3 days.',
+    footer: 'This e-mail was sent automatically by TeamCal.',
+    app: 'Application'
+  },
+  de: {
+    subject: 'Einladung zur Kontoerstellung',
+    intro: 'Für Sie wurde ein Konto erstellt. Klicken Sie auf die Schaltfläche unten, um Ihr Passwort zu wählen.',
+    action: 'Passwort erstellen',
+    hint: 'Dieser Link läuft in 3 Tagen ab.',
+    footer: 'Diese E-Mail wurde automatisch von TeamCal gesendet.',
+    app: 'Anwendung'
+  }
+};
+
+export async function sendAccountEmail(
+  settings: AppSettings,
+  input: { to: string; name: string; language: string; url: string; kind: AccountMailKind }
+): Promise<boolean> {
+  if (!smtpConfigured(settings)) return false;
+  const t = accountTexts[input.language] ?? accountTexts.fr;
+  const subject =
+    input.kind === 'invite'
+      ? `${settings.appName} - ${t.subject}`
+      : `${settings.appName} - ${input.language === 'de' ? 'Passwort zurücksetzen' : input.language === 'en' ? 'Password reset' : 'Réinitialisation du mot de passe'}`;
+  const intro =
+    input.kind === 'invite'
+      ? t.intro
+      : input.language === 'de'
+        ? 'Eine Zurücksetzung Ihres Passworts wurde angefordert. Klicken Sie auf die Schaltfläche unten, um ein neues Passwort zu wählen.'
+        : input.language === 'en'
+          ? 'A password reset was requested. Click the button below to choose a new password.'
+          : 'Une réinitialisation de votre mot de passe a été demandée. Cliquez sur le bouton ci-dessous pour choisir un nouveau mot de passe.';
+  const action =
+    input.kind === 'invite'
+      ? t.action
+      : input.language === 'de'
+        ? 'Neues Passwort wählen'
+        : input.language === 'en'
+          ? 'Choose a new password'
+          : 'Choisir un nouveau mot de passe';
+  const html = `<!doctype html><html><body style="font-family:Segoe UI,Arial,sans-serif;color:#1c2434">
+    <h2 style="margin:0 0 8px">${escapeHtml(settings.appName)}</h2>
+    <p>${escapeHtml(intro)}</p>
+    <p><a href="${escapeHtml(input.url)}" style="display:inline-block;padding:10px 16px;border-radius:6px;background:#2f6feb;color:#fff;text-decoration:none">${escapeHtml(action)}</a></p>
+    <p style="color:#64748b;font-size:12px">${escapeHtml(t.hint)}</p>
+    <p style="color:#64748b;font-size:12px">${escapeHtml(t.footer)}</p>
+  </body></html>`;
+  try {
+    await transport(settings).sendMail({
+      from: { name: settings.smtp.fromName || settings.appName, address: settings.smtp.fromEmail },
+      to: { name: input.name || input.to, address: input.to },
+      subject,
+      html,
+      text: `${intro}\n${input.url}\n${t.hint}`
+    });
+    return true;
+  } catch (error) {
+    logger.error('account_email_failed', {
+      kind: input.kind,
+      recipient: input.to,
+      error: error instanceof Error ? error.message : String(error)
+    });
+    return false;
+  }
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')

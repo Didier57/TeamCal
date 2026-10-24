@@ -14,11 +14,20 @@ import {
 } from '../lib/auth';
 import { hashPassword, passwordIssues, verifyPassword } from '../lib/password';
 import { audit } from '../lib/audit';
-import { asyncHandler, HttpError, nowIso, randomToken } from '../lib/util';
-import { SettingsStore } from '../settings';
+import { accountTokenExpiry, asyncHandler, HttpError, nowIso, randomToken } from '../lib/util';
+import { SettingsStore, type AppSettings } from '../settings';
 import { isValidTimeZone } from '../lib/time';
 import { isCountryCode } from '../lib/countries';
 import { syncHolidays } from '../lib/holidays';
+import { sendAccountEmail } from '../lib/mailer';
+
+function appBaseUrl(req: { protocol: string; get(header: string): string | undefined }, settings: AppSettings) {
+  return (settings.baseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+}
+
+function accountUrl(req: { protocol: string; get(header: string): string | undefined }, settings: AppSettings, token: string) {
+  return `${appBaseUrl(req, settings)}/reset-password?token=${encodeURIComponent(token)}`;
+}
 
 const loginSchema = z.object({
   username: z.string().trim().min(1).max(100),
@@ -77,6 +86,13 @@ const passwordSchema = z.object({
   newPassword: z.string().min(8).max(200)
 });
 
+const forgotSchema = z.object({ email: z.string().trim().email().max(200) });
+
+const resetSchema = z.object({
+  token: z.string().min(10).max(200),
+  password: z.string().min(8).max(200)
+});
+
 export function authRoutes(): Router {
   const router = Router();
 
@@ -124,7 +140,9 @@ export function authRoutes(): Router {
       const duration = body.remember ? Math.max(30, settings.sessionDurationDays) : 1;
       const session = createSession(req, res, user.id, duration);
       req.db
-        .prepare('UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?')
+        .prepare(
+          'UPDATE users SET last_login_at = ?, updated_at = ?, password_token = NULL, password_token_expires_at = NULL WHERE id = ?'
+        )
         .run(nowIso(), nowIso(), user.id);
       audit(req.db, { userId: user.id, action: 'auth.login', entity: 'user', entityId: user.id, ip });
       res.json({
@@ -132,6 +150,87 @@ export function authRoutes(): Router {
         csrfToken: session.csrf_token,
         settings: store.publicView()
       });
+    })
+  );
+
+  router.post(
+    '/forgot-password',
+    asyncHandler(async (req, res) => {
+      const body = forgotSchema.parse(req.body);
+      const user = req.db
+        .prepare('SELECT * FROM users WHERE email = ? COLLATE NOCASE AND is_active = 1')
+        .get(body.email) as UserRow | undefined;
+      if (user) {
+        const token = randomToken(32);
+        req.db
+          .prepare(
+            'UPDATE users SET password_token = ?, password_token_expires_at = ?, updated_at = ? WHERE id = ?'
+          )
+          .run(token, accountTokenExpiry(), nowIso(), user.id);
+        const settings = new SettingsStore(req.db).get();
+        const displayName = `${user.first_name} ${user.last_name}`.trim() || user.username;
+        await sendAccountEmail(settings, {
+          to: user.email,
+          name: displayName,
+          language: user.language,
+          url: accountUrl(req, settings, token),
+          kind: 'reset'
+        });
+        audit(req.db, {
+          action: 'auth.password_reset_requested',
+          entity: 'user',
+          entityId: user.id,
+          ip: req.ip
+        });
+      }
+      res.json({ ok: true });
+    })
+  );
+
+  router.get(
+    '/reset/:token',
+    asyncHandler(async (req, res) => {
+      const user = req.db
+        .prepare('SELECT * FROM users WHERE password_token = ? AND is_active = 1')
+        .get(req.params.token) as UserRow | undefined;
+      const valid = Boolean(
+        user && user.password_token_expires_at && user.password_token_expires_at > nowIso()
+      );
+      res.json(
+        valid && user
+          ? { valid: true, username: user.username, firstName: user.first_name, email: user.email }
+          : { valid: false }
+      );
+    })
+  );
+
+  router.post(
+    '/reset-password',
+    asyncHandler(async (req, res) => {
+      const body = resetSchema.parse(req.body);
+      const issue = passwordIssues(body.password);
+      if (issue) throw new HttpError(400, issue);
+      const user = req.db
+        .prepare('SELECT * FROM users WHERE password_token = ? AND is_active = 1')
+        .get(body.token) as UserRow | undefined;
+      if (!user || !user.password_token_expires_at || user.password_token_expires_at <= nowIso()) {
+        throw new HttpError(400, 'invalid_token');
+      }
+      const hash = await hashPassword(body.password);
+      req.db
+        .prepare(
+          `UPDATE users SET password_hash = ?, password_token = NULL, password_token_expires_at = NULL,
+             updated_at = ? WHERE id = ?`
+        )
+        .run(hash, nowIso(), user.id);
+      req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+      audit(req.db, {
+        action: 'auth.password_reset',
+        entity: 'user',
+        entityId: user.id,
+        ip: req.ip
+      });
+      res.json({ ok: true });
     })
   );
 

@@ -3,18 +3,19 @@ import { z } from 'zod';
 import { publicUser, requireAdmin, requireAuth, type UserRow } from '../lib/auth';
 import { hashPassword, passwordIssues } from '../lib/password';
 import { audit } from '../lib/audit';
-import { asyncHandler, HttpError, newId, nowIso, randomToken } from '../lib/util';
+import { asyncHandler, HttpError, newId, nowIso, randomToken, accountTokenExpiry } from '../lib/util';
 import { isValidTimeZone } from '../lib/time';
 import { isCountryCode } from '../lib/countries';
-import { SettingsStore } from '../settings';
+import { SettingsStore, type AppSettings } from '../settings';
 import { syncHolidays } from '../lib/holidays';
+import { sendAccountEmail } from '../lib/mailer';
 
 const createSchema = z.object({
   username: z.string().trim().min(3).max(50),
   email: z.string().trim().email().max(200),
   firstName: z.string().trim().max(80).default(''),
   lastName: z.string().trim().max(80).default(''),
-  password: z.string().min(8).max(200),
+  password: z.string().min(8).max(200).optional(),
   isAdmin: z.boolean().optional().default(false),
   language: z.enum(['fr', 'en', 'de']).optional().default('fr'),
   timezone: z.string().max(80).optional(),
@@ -33,7 +34,13 @@ const updateSchema = z.object({
   defaultView: z.enum(['day', 'week', 'month']).optional()
 });
 
-const passwordSchema = z.object({ newPassword: z.string().min(8).max(200) });
+function appBaseUrl(req: { protocol: string; get(header: string): string | undefined }, settings: AppSettings) {
+  return (settings.baseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+}
+
+function accountUrl(req: { protocol: string; get(header: string): string | undefined }, settings: AppSettings, token: string) {
+  return `${appBaseUrl(req, settings)}/reset-password?token=${encodeURIComponent(token)}`;
+}
 
 export function userRoutes(): Router {
   const router = Router();
@@ -72,8 +79,11 @@ export function userRoutes(): Router {
     requireAdmin,
     asyncHandler(async (req, res) => {
       const body = createSchema.parse(req.body);
-      const issue = passwordIssues(body.password);
-      if (issue) throw new HttpError(400, issue);
+      const passwordProvided = Boolean(body.password);
+      if (passwordProvided) {
+        const issue = passwordIssues(body.password!);
+        if (issue) throw new HttpError(400, issue);
+      }
       if (body.timezone && !isValidTimeZone(body.timezone)) throw new HttpError(400, 'invalid_timezone');
       if (body.country && !isCountryCode(body.country)) throw new HttpError(400, 'invalid_country');
       const exists = req.db
@@ -82,15 +92,17 @@ export function userRoutes(): Router {
       if (exists) throw new HttpError(409, 'username_taken');
       const id = newId();
       const now = nowIso();
-      const hash = await hashPassword(body.password);
+      const hash = await hashPassword(passwordProvided ? body.password! : randomToken(32));
+      const token = passwordProvided ? null : randomToken(32);
+      const tokenExpiry = token ? accountTokenExpiry() : null;
       const color = ['#2f6feb', '#1f9d55', '#b45309', '#9333ea', '#dc2626', '#0891b2'][
         Math.floor(Math.random() * 6)
       ];
       req.db.transaction(() => {
         req.db
           .prepare(
-            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, country, default_view, feed_token, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'week', ?, ?, ?)`
+            `INSERT INTO users (id, username, email, first_name, last_name, password_hash, is_admin, is_active, language, timezone, country, default_view, feed_token, password_token, password_token_expires_at, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, 'week', ?, ?, ?, ?, ?)`
           )
           .run(
             id,
@@ -104,6 +116,8 @@ export function userRoutes(): Router {
             body.timezone ?? null,
             body.country ?? null,
             randomToken(24),
+            token,
+            tokenExpiry,
             now,
             now
           );
@@ -112,18 +126,30 @@ export function userRoutes(): Router {
           .run(newId(), id, body.username, color, now);
       })();
       const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
+      const settings = new SettingsStore(req.db).get();
+      const displayName = `${body.firstName} ${body.lastName}`.trim() || body.username;
+      const emailSent =
+        token && body.email
+          ? await sendAccountEmail(settings, {
+              to: body.email,
+              name: displayName,
+              language: body.language,
+              url: accountUrl(req, settings, token),
+              kind: 'invite'
+            })
+          : false;
       if (body.country) {
-        void syncHolidays(req.db, new SettingsStore(req.db).get(), id).catch(() => undefined);
+        void syncHolidays(req.db, settings, id).catch(() => undefined);
       }
       audit(req.db, {
         userId: req.user!.id,
         action: 'user.created',
         entity: 'user',
         entityId: id,
-        details: { username: body.username },
+        details: { username: body.username, invited: Boolean(token), emailSent },
         ip: req.ip
       });
-      res.status(201).json(publicUser(user));
+      res.status(201).json({ ...publicUser(user), emailSent });
     })
   );
 
@@ -185,29 +211,36 @@ export function userRoutes(): Router {
   );
 
   router.post(
-    '/:id/password',
+    '/:id/invite',
     requireAdmin,
     asyncHandler(async (req, res) => {
-      const body = passwordSchema.parse(req.body);
-      const issue = passwordIssues(body.newPassword);
-      if (issue) throw new HttpError(400, issue);
       const target = req.db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id) as
         | UserRow
         | undefined;
       if (!target) throw new HttpError(404, 'user_not_found');
-      const hash = await hashPassword(body.newPassword);
+      if (!target.is_active) throw new HttpError(400, 'account_disabled');
+      const token = randomToken(32);
       req.db
-        .prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?')
-        .run(hash, nowIso(), target.id);
-      req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(target.id);
+        .prepare('UPDATE users SET password_token = ?, password_token_expires_at = ?, updated_at = ? WHERE id = ?')
+        .run(token, accountTokenExpiry(), nowIso(), target.id);
+      const settings = new SettingsStore(req.db).get();
+      const displayName = `${target.first_name} ${target.last_name}`.trim() || target.username;
+      const emailSent = await sendAccountEmail(settings, {
+        to: target.email,
+        name: displayName,
+        language: target.language,
+        url: accountUrl(req, settings, token),
+        kind: 'invite'
+      });
       audit(req.db, {
         userId: req.user!.id,
-        action: 'user.password_reset',
+        action: 'user.invited',
         entity: 'user',
         entityId: target.id,
+        details: { emailSent },
         ip: req.ip
       });
-      res.json({ ok: true });
+      res.json({ ok: true, emailSent });
     })
   );
 
@@ -219,16 +252,26 @@ export function userRoutes(): Router {
         | UserRow
         | undefined;
       if (!target) throw new HttpError(404, 'user_not_found');
-      if (target.id === req.user!.id) throw new HttpError(400, 'cannot_disable_self');
-      req.db
-        .prepare('UPDATE users SET is_active = 0, updated_at = ? WHERE id = ?')
-        .run(nowIso(), target.id);
-      req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(target.id);
+      if (target.id === req.user!.id) throw new HttpError(400, 'cannot_delete_self');
+      if (target.is_admin) {
+        const admins = req.db
+          .prepare('SELECT COUNT(*) AS count FROM users WHERE is_admin = 1 AND is_active = 1')
+          .get() as { count: number };
+        if (admins.count <= 1) throw new HttpError(400, 'last_admin');
+      }
+      req.db.transaction(() => {
+        req.db
+          .prepare('UPDATE events SET created_by = owner_id WHERE created_by = ? AND owner_id <> ?')
+          .run(target.id, target.id);
+        req.db.prepare('DELETE FROM events WHERE owner_id = ?').run(target.id);
+        req.db.prepare('DELETE FROM users WHERE id = ?').run(target.id);
+      })();
       audit(req.db, {
         userId: req.user!.id,
-        action: 'user.disabled',
+        action: 'user.deleted',
         entity: 'user',
         entityId: target.id,
+        details: { username: target.username },
         ip: req.ip
       });
       res.json({ ok: true });

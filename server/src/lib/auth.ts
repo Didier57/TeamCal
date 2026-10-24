@@ -19,6 +19,8 @@ export interface UserRow {
   theme: string | null;
   theme_colors: string | null;
   feed_token: string | null;
+  password_token: string | null;
+  password_token_expires_at: string | null;
   country: string | null;
   last_login_at: string | null;
   created_at: string;
