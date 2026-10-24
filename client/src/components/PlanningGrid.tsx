@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useRef, type DragEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { useI18n } from '../i18n';
 import { addDaysToDateKey, toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
 import type { Calendar, Occurrence, PublicSettings, ViewKind } from '../types';
@@ -70,6 +70,22 @@ function descriptionText(description: string | null | undefined, html: boolean):
   return (parsed.body.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() =>
+    typeof window === 'undefined' ? false : window.matchMedia(query).matches
+  );
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, [query]);
+
+  return matches;
+}
+
 export function PlanningGrid({
   view,
   date,
@@ -82,6 +98,7 @@ export function PlanningGrid({
   onMove
 }: Props) {
   const { t, locale } = useI18n();
+  const isMobile = useMediaQuery('(max-width: 900px)');
   const dragged = useRef<Occurrence | null>(null);
 
   const anchorKey = localDateKey(date);
@@ -320,6 +337,80 @@ export function PlanningGrid({
     if (!calendar.canCreate) return;
     const startIso = wallTimeToUtc(`${key}T00:00`, timeZone);
     onCreate(calendar.id, new Date(startIso), new Date(startIso), true);
+  }
+
+  if (isMobile) {
+    const createCalendar = calendars.find((calendar) => calendar.canCreate);
+    const visibleDays =
+      view === 'month'
+        ? dayKeys.filter((key) => (monthEventsByDay.get(key) ?? []).length > 0)
+        : dayKeys;
+
+    return (
+      <div className="mobile-agenda">
+        {visibleDays.length === 0 && (
+          <div className="mobile-agenda-empty">{t('calendar.noEvents')}</div>
+        )}
+        {visibleDays.map((key) => {
+          const list = monthEventsByDay.get(key) ?? [];
+          const isToday = key === todayKey;
+          return (
+            <section key={key} className={`mobile-day ${isToday ? 'today' : ''}`}>
+              <div className="mobile-day-head">
+                <span className="mobile-day-name">
+                  {formatHeader(key, locale, { weekday: 'long', day: 'numeric', month: 'long' })}
+                </span>
+                {isToday && <span className="mobile-today-pill">{t('common.today')}</span>}
+                {createCalendar && (
+                  <button
+                    type="button"
+                    className="mobile-day-add"
+                    onClick={() => createInCell(createCalendar, key)}
+                    aria-label={t('calendar.newEvent')}
+                    title={t('calendar.newEvent')}
+                  >
+                    +
+                  </button>
+                )}
+              </div>
+              {list.length === 0 ? (
+                <p className="mobile-day-empty">{t('calendar.noEvents')}</p>
+              ) : (
+                <div className="mobile-day-events">
+                  {list.map((occurrence) => {
+                    const color = occurrence.categoryColor ?? occurrence.calendarColor;
+                    const owner = calendarById.get(occurrence.calendarId)?.ownerName ?? '';
+                    const description = descriptionText(
+                      occurrence.description,
+                      settings.allowHtmlDescription
+                    );
+                    return (
+                      <button
+                        key={occurrence.id}
+                        type="button"
+                        className="mobile-event"
+                        style={{
+                          borderLeftColor: color,
+                          background: `color-mix(in srgb, ${color} 11%, var(--color-surface))`
+                        }}
+                        onClick={() => onEdit(occurrence)}
+                        title={`${occurrence.title}${description ? `\n\n${description}` : ''}`}
+                      >
+                        <span className="mobile-event-time">{timeLabel(occurrence)}</span>
+                        <span className="mobile-event-body">
+                          <span className="mobile-event-title">{occurrence.title}</span>
+                          {owner && <span className="mobile-event-owner">{owner}</span>}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          );
+        })}
+      </div>
+    );
   }
 
   const rowStyle = (columns: number) => ({
