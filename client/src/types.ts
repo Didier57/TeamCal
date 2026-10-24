@@ -88,6 +88,32 @@ export interface HolidaySyncResult {
   errors: string[];
 }
 
+export interface BackupSettings {
+  enabled: boolean;
+  host: string;
+  share: string;
+  username: string;
+  password: string;
+  domain: string;
+  folder: string;
+  day: 'all' | number;
+  time: string;
+  keep: number;
+  hasPassword?: boolean;
+}
+
+export interface BackupFile {
+  name: string;
+  size: number;
+  modifiedAt: string;
+}
+
+export interface BackupResult {
+  file: string;
+  size: number;
+  deleted: string[];
+}
+
 export interface AdminHoliday {
   key: string;
   country: string;
@@ -119,6 +145,7 @@ export interface AdminSettings extends PublicSettings {
     fromEmail: string;
     hasPassword?: boolean;
   };
+  backup: BackupSettings;
   sessionDurationDays: number;
 }
 
@@ -195,6 +222,8 @@ export interface EventSearchResult {
   end: string;
   allDay: boolean;
   timezone: string;
+  calendarName?: string | null;
+  calendarColor?: string | null;
   categoryName: string | null;
   categoryColor: string | null;
   participants: string[];

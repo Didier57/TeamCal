@@ -90,8 +90,35 @@ const settingsSchema = z.object({
     })
     .partial()
     .optional(),
+  backup: z
+    .object({
+      enabled: z.boolean(),
+      host: z.string().trim().max(255),
+      share: z.string().trim().max(255),
+      username: z.string().trim().max(200),
+      password: z.string().max(500),
+      domain: z.string().trim().max(200),
+      folder: z.string().trim().max(255),
+      day: z.union([z.literal('all'), z.number().int().min(0).max(6)]),
+      time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+      keep: z.number().int().min(1).max(100)
+    })
+    .partial()
+    .optional(),
   sessionDurationDays: z.number().int().min(1).max(90).optional()
 });
+
+function adminSettingsView(settings: ReturnType<SettingsStore['get']>) {
+  return {
+    ...settings,
+    smtp: { ...settings.smtp, password: '', hasPassword: Boolean(settings.smtp.password) },
+    backup: {
+      ...settings.backup,
+      password: '',
+      hasPassword: Boolean(settings.backup.password)
+    }
+  };
+}
 
 export function settingsRoutes(): Router {
   const router = Router();
@@ -109,10 +136,7 @@ export function settingsRoutes(): Router {
     requireAdmin,
     asyncHandler(async (req, res) => {
       const settings = new SettingsStore(req.db).get();
-      res.json({
-        ...settings,
-        smtp: { ...settings.smtp, password: '', hasPassword: Boolean(settings.smtp.password) }
-      });
+      res.json(adminSettingsView(settings));
     })
   );
 
@@ -143,6 +167,15 @@ export function settingsRoutes(): Router {
           throw new HttpError(400, 'invalid_from_email');
         }
       }
+      if (body.backup) {
+        if (!body.backup.password) {
+          body.backup.password = current.backup.password;
+        }
+        const nextBackup = { ...current.backup, ...body.backup };
+        if (nextBackup.enabled && (!nextBackup.host.trim() || !nextBackup.share.trim())) {
+          throw new HttpError(400, 'backup_not_configured');
+        }
+      }
       store.set(body as Record<string, unknown>);
       audit(req.db, {
         userId: req.user!.id,
@@ -153,10 +186,7 @@ export function settingsRoutes(): Router {
       });
       const settings = store.get();
       void syncHolidays(req.db, settings).catch(() => undefined);
-      res.json({
-        ...settings,
-        smtp: { ...settings.smtp, password: '', hasPassword: Boolean(settings.smtp.password) }
-      });
+      res.json(adminSettingsView(settings));
     })
   );
 

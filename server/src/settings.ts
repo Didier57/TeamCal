@@ -41,6 +41,19 @@ export interface SmtpSettings {
   fromEmail: string;
 }
 
+export interface BackupSettings {
+  enabled: boolean;
+  host: string;
+  share: string;
+  username: string;
+  password: string;
+  domain: string;
+  folder: string;
+  day: 'all' | number;
+  time: string;
+  keep: number;
+}
+
 export interface AppSettings {
   appName: string;
   baseUrl: string;
@@ -67,6 +80,7 @@ export interface AppSettings {
   holidaySources: HolidaySource[];
   theme: { light: ThemeColors; dark: ThemeColors };
   smtp: SmtpSettings;
+  backup: BackupSettings;
   sessionDurationDays: number;
   setupCompleted: boolean;
 }
@@ -147,6 +161,18 @@ export const defaultSettings: AppSettings = {
     password: '',
     fromName: 'TeamCal',
     fromEmail: ''
+  },
+  backup: {
+    enabled: false,
+    host: '',
+    share: '',
+    username: '',
+    password: '',
+    domain: '',
+    folder: '',
+    day: 'all',
+    time: '04:00',
+    keep: 15
   },
   sessionDurationDays: 14,
   setupCompleted: false

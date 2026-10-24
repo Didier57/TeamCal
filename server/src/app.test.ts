@@ -1,7 +1,11 @@
 import { describe, expect, it, beforeEach } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import request from 'supertest';
 import { openDatabase, type DB } from './db';
 import { createApp } from './app';
+import { SettingsStore } from './settings';
 
 async function setupAdmin(app: any) {
   const agent = request.agent(app);
@@ -778,6 +782,101 @@ describe('TeamCal API', () => {
     expect(login.status).toBe(200);
     const forbidden = await userAgent.get('/api/reports/system');
     expect(forbidden.status).toBe(403);
+  });
+
+  it('exports and restores the database while keeping the backup password', async () => {
+    const { agent: admin, csrf } = await setupAdmin(app);
+    const calendars = await admin.get('/api/calendars');
+    const calendarId = calendars.body[0].id as string;
+
+    const saved = await admin
+      .put('/api/settings')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        backup: {
+          enabled: false,
+          host: '10.0.0.5',
+          share: 'BACKUPS',
+          username: 'backup',
+          password: 'Secret123!',
+          folder: 'TeamCal',
+          day: 'all',
+          time: '04:00',
+          keep: 10
+        }
+      });
+    expect(saved.status).toBe(200);
+    expect(saved.body.backup.password).toBe('');
+    expect(saved.body.backup.hasPassword).toBe(true);
+
+    const kept = await admin
+      .put('/api/settings')
+      .set('X-CSRF-Token', csrf)
+      .send({ backup: { host: '10.0.0.6' } });
+    expect(kept.status).toBe(200);
+    expect(new SettingsStore(db).get().backup.password).toBe('Secret123!');
+
+    await admin
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Backup before',
+        start: '2027-11-01T09:00:00.000Z',
+        end: '2027-11-01T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+
+    const binaryParser = (res: any, callback: any) => {
+      let data = '';
+      res.setEncoding('binary');
+      res.on('data', (chunk: string) => {
+        data += chunk;
+      });
+      res.on('end', () => callback(null, Buffer.from(data, 'binary')));
+    };
+    const exported = await admin.get('/api/backups/export').buffer(true).parse(binaryParser);
+    expect(exported.status).toBe(200);
+    expect(String(exported.headers['content-disposition'])).toContain('teamcal_');
+    const snapshot = exported.body as Buffer;
+    expect(snapshot.subarray(0, 15).toString('utf8')).toBe('SQLite format 3');
+
+    await admin
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Backup after',
+        start: '2027-11-02T09:00:00.000Z',
+        end: '2027-11-02T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris'
+      });
+
+    const file = path.join(os.tmpdir(), `teamcal-test-${Date.now()}.sqlite`);
+    fs.writeFileSync(file, snapshot);
+    try {
+      const restored = await admin
+        .post('/api/backups/import')
+        .set('Content-Type', 'application/octet-stream')
+        .set('X-CSRF-Token', csrf)
+        .send(fs.readFileSync(file));
+      expect(restored.status).toBe(200);
+      expect(restored.body.ok).toBe(true);
+    } finally {
+      fs.rmSync(file, { force: true });
+    }
+
+    const titles = (
+      db.prepare("SELECT title FROM events WHERE title LIKE 'Backup %' ORDER BY title").all() as {
+        title: string;
+      }[]
+    ).map((row) => row.title);
+    expect(titles).toEqual(['Backup before']);
+    expect(new SettingsStore(db).get().backup.password).toBe('Secret123!');
+    const me = await admin.get('/api/auth/me');
+    expect(me.status).toBe(200);
   });
 
   it('prevents non-admins from reading administration settings', async () => {

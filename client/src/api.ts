@@ -52,3 +52,29 @@ export const apiPut = <T>(path: string, body?: unknown) =>
 export const apiPatch = <T>(path: string, body?: unknown) =>
   api<T>(path, { method: 'PATCH', body: body === undefined ? undefined : JSON.stringify(body) });
 export const apiDelete = <T>(path: string) => api<T>(path, { method: 'DELETE' });
+
+export async function apiUpload<T>(path: string, body: Blob): Promise<T> {
+  const headers = new Headers({ 'Content-Type': 'application/octet-stream' });
+  if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+  const response = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers,
+    body,
+    credentials: 'same-origin'
+  });
+  const text = await response.text();
+  let data: unknown = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+  }
+  if (!response.ok) {
+    const payload = data && typeof data === 'object' ? (data as { error?: unknown; details?: unknown }) : null;
+    const error = payload && 'error' in payload ? String(payload.error) : `http_${response.status}`;
+    throw new ApiError(error, response.status, payload?.details);
+  }
+  return data as T;
+}

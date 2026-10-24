@@ -212,7 +212,7 @@ export function openDatabase(databasePath: string): DB {
   return db;
 }
 
-function runMigrations(db: DB) {
+export function runMigrations(db: DB) {
   db.exec('CREATE TABLE IF NOT EXISTS schema_migrations (id INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)');
   const applied = new Set(
     db.prepare('SELECT id FROM schema_migrations').all().map((r) => (r as { id: number }).id)

@@ -8,6 +8,7 @@ import { ThemeAdmin } from '../components/admin/ThemeAdmin';
 import { PermissionsAdmin } from '../components/admin/PermissionsAdmin';
 import { HolidaysAdmin } from '../components/admin/HolidaysAdmin';
 import { ImportAdmin } from '../components/admin/ImportAdmin';
+import { BackupAdmin } from '../components/admin/BackupAdmin';
 
 type Tab =
   | 'users'
@@ -17,7 +18,8 @@ type Tab =
   | 'permissions'
   | 'smtp'
   | 'appearance'
-  | 'holidays';
+  | 'holidays'
+  | 'backup';
 
 export function AdminPage() {
   const { t } = useI18n();
@@ -31,7 +33,8 @@ export function AdminPage() {
     { id: 'permissions', label: t('admin.permissions') },
     { id: 'smtp', label: t('admin.smtp') },
     { id: 'appearance', label: t('admin.appearance') },
-    { id: 'holidays', label: t('admin.holidaysTitle') }
+    { id: 'holidays', label: t('admin.holidaysTitle') },
+    { id: 'backup', label: t('admin.backupTitle') }
   ];
 
   return (
@@ -61,6 +64,7 @@ export function AdminPage() {
       {tab === 'smtp' && <SmtpAdmin />}
       {tab === 'appearance' && <ThemeAdmin />}
       {tab === 'holidays' && <HolidaysAdmin />}
+      {tab === 'backup' && <BackupAdmin />}
     </div>
   );
 }

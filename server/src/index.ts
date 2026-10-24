@@ -5,6 +5,7 @@ import { cleanupExpiredSessions } from './lib/auth';
 import { logger } from './lib/logger';
 import { SettingsStore } from './settings';
 import { startHolidayScheduler } from './lib/holidays';
+import { startBackupScheduler } from './lib/backup';
 
 const port = Number(process.env.PORT ?? 8080);
 const databasePath = process.env.DATABASE_PATH ?? path.resolve(__dirname, '../../data/teamcal.sqlite');
@@ -32,6 +33,7 @@ const cleanup = setInterval(() => {
 }, 60 * 60 * 1000);
 cleanup.unref();
 startHolidayScheduler(db);
+startBackupScheduler(db);
 
 const server = app.listen(port, () => {
   logger.info('server_listening', { port });

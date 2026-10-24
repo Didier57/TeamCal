@@ -168,6 +168,13 @@ function calendarColor(db: any, calendarId: string): string {
   return row?.color ?? '#2f6feb';
 }
 
+function calendarInfo(db: any, calendarId: string): { name: string | null; color: string } {
+  const row = db.prepare('SELECT name, color FROM calendars WHERE id = ?').get(calendarId) as
+    | { name: string; color: string }
+    | undefined;
+  return { name: row?.name ?? null, color: row?.color ?? '#2f6feb' };
+}
+
 function categoryInfo(db: any, categoryId: string | null): { color: string | null; name: string | null } {
   if (!categoryId) return { color: null, name: null };
   const row = db.prepare('SELECT name, color FROM categories WHERE id = ?').get(categoryId) as
@@ -346,6 +353,7 @@ export function eventRoutes(): Router {
       }
       const results = limited.map((event) => {
         const category = categoryInfo(req.db, event.category_id);
+        const calendar = calendarInfo(req.db, event.calendar_id);
         return {
           id: event.id,
           title: event.title,
@@ -354,6 +362,8 @@ export function eventRoutes(): Router {
           end: event.end_at,
           allDay: Boolean(event.all_day),
           timezone: event.timezone,
+          calendarName: calendar.name,
+          calendarColor: calendar.color,
           categoryName: category.name,
           categoryColor: category.color,
           participants: participantsByEvent.get(event.id) ?? []

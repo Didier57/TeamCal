@@ -158,6 +158,8 @@ Les échecs SMTP sont journalisés dans `email_log` sans annuler l'opération m�
 
 ### Sauvegarde
 
+L'administration propose un onglet **Sauvegarde** : export/restauration d'un fichier SQLite, sauvegarde automatique vers un partage SMB (jour, heure et rotation configurables) et liste des sauvegardes distantes avec restauration ou suppression.
+
 Sauvegarde cohérente à chaud via l'API SQLite (WAL inclus) :
 
 ```bash

@@ -2,9 +2,10 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiGet, ApiError } from '../api';
 import { useAuth } from '../app-context';
+import { EventReadonlyDialog } from '../components/EventReadonlyDialog';
 import { effectiveTimeZone, formatDate } from '../format';
 import { useI18n } from '../i18n';
-import type { EventSearchResponse } from '../types';
+import type { EventSearchResponse, EventSearchResult } from '../types';
 
 export function SearchPage() {
   const { user, settings } = useAuth();
@@ -15,6 +16,7 @@ export function SearchPage() {
   const [response, setResponse] = useState<EventSearchResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<EventSearchResult | null>(null);
 
   useEffect(() => {
     setInput(query);
@@ -115,8 +117,19 @@ export function SearchPage() {
                 </thead>
                 <tbody>
                   {response.results.map((item) => (
-                    <tr key={item.id}>
-                      <td className="search-title">{item.title}</td>
+                    <tr key={item.id} className="search-row" onClick={() => setSelected(item)}>
+                      <td className="search-title">
+                        <button
+                          type="button"
+                          className="report-event-link"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setSelected(item);
+                          }}
+                        >
+                          {item.title}
+                        </button>
+                      </td>
                       <td className="search-description" title={item.description || undefined}>
                         {item.description || <span className="muted">—</span>}
                       </td>
@@ -145,6 +158,16 @@ export function SearchPage() {
           </div>
         )}
       </section>
+      {selected && (
+        <EventReadonlyDialog
+          eventId={selected.id}
+          title={selected.title}
+          calendarName={selected.calendarName}
+          categoryName={selected.categoryName}
+          participants={selected.participants}
+          onClose={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
