@@ -130,7 +130,7 @@ export function CalendarPage() {
     setViews(viewList);
     const preferred = user?.defaultView;
     const preferredView = preferred?.startsWith('view:')
-      ? viewList.find((customView) => customView.id === preferred.slice('view:'.length) && customView.isShared)
+      ? viewList.find((customView) => customView.id === preferred.slice('view:'.length))
       : undefined;
     if (preferredView) {
       setSelected(

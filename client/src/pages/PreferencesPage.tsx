@@ -36,7 +36,7 @@ export function PreferencesPage() {
   const [dateFormat, setDateFormat] = useState(user?.dateFormat ?? '');
   const [timeFormat, setTimeFormat] = useState(user?.timeFormat ?? '');
   const [defaultView, setDefaultView] = useState<string>(user?.defaultView ?? 'week');
-  const [globalViews, setGlobalViews] = useState<CustomView[]>([]);
+  const [views, setViews] = useState<CustomView[]>([]);
   const [theme, setThemeValue] = useState<ThemeKind | ''>(user?.theme ?? '');
   const [useCustomColors, setUseCustomColors] = useState(Boolean(user?.themeColors));
   const [themeColors, setThemeColors] = useState<{ light: ThemeColors; dark: ThemeColors }>({
@@ -68,10 +68,9 @@ export function PreferencesPage() {
     apiGet<CustomView[]>('/views')
       .then((list) => {
         if (!active) return;
-        const shared = list.filter((view) => view.isShared);
-        setGlobalViews(shared);
+        setViews(list);
         setDefaultView((current) =>
-          current.startsWith('view:') && !shared.some((view) => `view:${view.id}` === current)
+          current.startsWith('view:') && !list.some((view) => `view:${view.id}` === current)
             ? 'week'
             : current
         );
@@ -83,6 +82,11 @@ export function PreferencesPage() {
   }, []);
 
   if (!user || !settings) return null;
+
+  const personalViews = views.filter((customView) => customView.ownerId === user.id);
+  const sharedViews = views.filter(
+    (customView) => customView.isShared && customView.ownerId !== user.id
+  );
 
   const feedBase = (settings.baseUrl || window.location.origin).replace(/\/+$/, '');
   const feedUrl = user.feedToken ? `${feedBase}/api/feed/${user.feedToken}.ics` : '';
@@ -255,9 +259,18 @@ export function PreferencesPage() {
               <option value="day">{t('common.day')}</option>
               <option value="week">{t('common.week')}</option>
               <option value="month">{t('common.month')}</option>
-              {globalViews.length > 0 && (
+              {personalViews.length > 0 && (
+                <optgroup label={t('prefs.personalViews')}>
+                  {personalViews.map((customView) => (
+                    <option key={customView.id} value={`view:${customView.id}`}>
+                      {customView.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {sharedViews.length > 0 && (
                 <optgroup label={t('prefs.globalViews')}>
-                  {globalViews.map((customView) => (
+                  {sharedViews.map((customView) => (
                     <option key={customView.id} value={`view:${customView.id}`}>
                       {customView.name}
                     </option>

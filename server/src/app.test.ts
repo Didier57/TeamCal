@@ -1314,6 +1314,52 @@ describe('TeamCal API', () => {
     expect(report.body.entries.some((entry: any) => entry.action === 'user.deleted')).toBe(true);
   });
 
+  it('allows users to set a personal or shared view as default', async () => {
+    const { agent, csrf } = await setupAdmin(app);
+    const view = await agent
+      .post('/api/views')
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Ma vue', userIds: [], isShared: false });
+    expect(view.status).toBe(201);
+    const viewId = view.body.id as string;
+
+    const personal = await agent
+      .put('/api/auth/me/preferences')
+      .set('X-CSRF-Token', csrf)
+      .send({ defaultView: `view:${viewId}` });
+    expect(personal.status).toBe(200);
+    expect(personal.body.user.defaultView).toBe(`view:${viewId}`);
+
+    await agent.post('/api/users').set('X-CSRF-Token', csrf).send({
+      username: 'bob',
+      email: 'bob@example.com',
+      password: 'Password123!'
+    });
+    const bob = request.agent(app);
+    const bobLogin = await bob
+      .post('/api/auth/login')
+      .send({ username: 'bob', password: 'Password123!' });
+    const bobCsrf = bobLogin.body.csrfToken as string;
+
+    const forbidden = await bob
+      .put('/api/auth/me/preferences')
+      .set('X-CSRF-Token', bobCsrf)
+      .send({ defaultView: `view:${viewId}` });
+    expect(forbidden.status).toBe(400);
+    expect(forbidden.body.error).toBe('invalid_default_view');
+
+    await agent
+      .patch(`/api/views/${viewId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ name: 'Ma vue partagée', userIds: [], isShared: true });
+    const shared = await bob
+      .put('/api/auth/me/preferences')
+      .set('X-CSRF-Token', bobCsrf)
+      .send({ defaultView: `view:${viewId}` });
+    expect(shared.status).toBe(200);
+    expect(shared.body.user.defaultView).toBe(`view:${viewId}`);
+  });
+
   it('exports and restores the database while keeping the backup password', async () => {
     const { agent: admin, csrf } = await setupAdmin(app);
     const calendars = await admin.get('/api/calendars');

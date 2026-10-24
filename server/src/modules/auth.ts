@@ -264,10 +264,10 @@ export function authRoutes(): Router {
       }
       if (body.defaultView?.startsWith('view:')) {
         const viewId = body.defaultView.slice('view:'.length);
-        const shared = req.db
-          .prepare('SELECT 1 FROM custom_views WHERE id = ? AND is_shared = 1')
-          .get(viewId);
-        if (!shared) throw new HttpError(400, 'invalid_default_view');
+        const view = req.db
+          .prepare('SELECT 1 FROM custom_views WHERE id = ? AND (is_shared = 1 OR owner_id = ?)')
+          .get(viewId, req.user!.id);
+        if (!view) throw new HttpError(400, 'invalid_default_view');
       }
       const current = req.user!;
       const themeColors =
