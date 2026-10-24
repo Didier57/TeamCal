@@ -34,6 +34,7 @@ export interface ParsedIcsEvent {
   recurrenceUntil: string | null;
   categories: string[];
   exdates: string[];
+  rdates: string[];
   recurrenceId: string | null;
   recurrenceRange: string | null;
   status: string;
@@ -329,6 +330,15 @@ function parseEventLines(lines: string[], fallbackTimezone: string): ParsedIcsEv
     }
   }
 
+  const rdates: string[] = [];
+  for (const prop of all('RDATE')) {
+    for (const value of splitValues(prop.value)) {
+      const datePart = value.split('/')[0];
+      const parsed = parseDateValue(datePart, prop.params, startParsed.timezone || fallbackTimezone);
+      if (parsed) rdates.push(occurrenceKey(parsed, startParsed.allDay, startParsed.timezone));
+    }
+  }
+
   const recurrenceIdProp = first('RECURRENCE-ID');
   let recurrenceId: string | null = null;
   if (recurrenceIdProp) {
@@ -363,6 +373,7 @@ function parseEventLines(lines: string[], fallbackTimezone: string): ParsedIcsEv
     recurrenceUntil: rrule ? recurrenceUntil(rrule, startParsed.timezone) : null,
     categories,
     exdates,
+    rdates,
     recurrenceId,
     recurrenceRange: recurrenceIdProp?.params.RANGE ?? null,
     status: (status?.value ?? 'CONFIRMED').toUpperCase()
@@ -504,12 +515,20 @@ export function importIcsEvents(db: DB, options: ImportIcsOptions): ImportIcsRes
   db.transaction(() => {
     masters.forEach((event, index) => {
       const uid = `import:${target.id}:${sourceUid(event, index)}`;
+      const source = sourceUid(event, index);
+      const rdates = event.rdates.length > 0 ? JSON.stringify(event.rdates) : null;
       const categoryId = resolveCategory(event);
       const description = cleanDescription(event.description, options.allowHtmlDescription);
       const url = event.url && isValidHttpUrl(event.url) ? event.url : null;
-      const existing = db.prepare('SELECT * FROM events WHERE uid = ?').get(uid) as
+      let existing = db.prepare('SELECT * FROM events WHERE uid = ?').get(uid) as
         | EventRow
         | undefined;
+      if (!existing) {
+        const native = db.prepare('SELECT * FROM events WHERE uid = ?').get(source) as
+          | EventRow
+          | undefined;
+        if (native && native.owner_id === target.id) existing = native;
+      }
       let eventId: string;
       if (existing) {
         eventId = existing.id;
@@ -517,7 +536,7 @@ export function importIcsEvents(db: DB, options: ImportIcsOptions): ImportIcsRes
           `UPDATE events SET calendar_id = ?, owner_id = ?, title = ?, description = ?,
              start_at = ?, end_at = ?, all_day = ?, timezone = ?, location = ?, url = ?,
              priority = NULL, visibility = 'default', category_id = ?, rrule = ?, recurrence_until = ?,
-             sequence = sequence + 1, status = 'confirmed', updated_at = ?
+             rdates = ?, sequence = sequence + 1, status = 'confirmed', updated_at = ?
            WHERE id = ?`
         ).run(
           target.calendar_id,
@@ -533,6 +552,7 @@ export function importIcsEvents(db: DB, options: ImportIcsOptions): ImportIcsRes
           categoryId,
           event.rrule,
           event.recurrenceUntil,
+          rdates,
           now,
           eventId
         );
@@ -541,9 +561,9 @@ export function importIcsEvents(db: DB, options: ImportIcsOptions): ImportIcsRes
         eventId = newId();
         db.prepare(
           `INSERT INTO events (id, uid, calendar_id, owner_id, created_by, title, description, start_at, end_at,
-             all_day, timezone, location, url, priority, visibility, category_id, rrule, recurrence_until,
+             all_day, timezone, location, url, priority, visibility, category_id, rrule, recurrence_until, rdates,
              sequence, status, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'default', ?, ?, ?, 0, 'confirmed', ?, ?)`
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'default', ?, ?, ?, ?, 0, 'confirmed', ?, ?)`
         ).run(
           eventId,
           uid,
@@ -561,6 +581,7 @@ export function importIcsEvents(db: DB, options: ImportIcsOptions): ImportIcsRes
           categoryId,
           event.rrule,
           event.recurrenceUntil,
+          rdates,
           now,
           now
         );

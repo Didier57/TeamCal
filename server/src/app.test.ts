@@ -721,6 +721,7 @@ describe('TeamCal API', () => {
     expect(bobExport.headers['content-disposition']).toContain('teamcal_bob.ics');
     expect(bobExport.text).toContain('SUMMARY:Bob imported event');
     expect(bobExport.text).toContain('CATEGORIES:Export category');
+    expect(bobExport.text).toContain('UID:self-import-1');
     expect(bobExport.text).not.toContain('Admin private export');
 
     const adminExport = await admin.get(`/api/export/ics?userId=${bobId}`);
@@ -810,6 +811,64 @@ describe('TeamCal API', () => {
     expect(text).toContain('DTSTART;VALUE=DATE:20260305');
     expect(text).toContain('DTEND;VALUE=DATE:20260307');
     expect(text.match(/BEGIN:VEVENT/g)).toHaveLength(3);
+  });
+
+  it('keeps original UIDs and RDATE entries through import and export', async () => {
+    const { agent, csrf, userId } = await setupAdmin(app);
+    const content = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//WebCalendar//EN',
+      'BEGIN:VEVENT',
+      'UID:webcal-1',
+      'DTSTAMP:20260101T000000Z',
+      'DTSTART;TZID=Europe/Paris:20270410T090000',
+      'DTEND;TZID=Europe/Paris:20270410T100000',
+      'RRULE:FREQ=WEEKLY;COUNT=3',
+      'RDATE;TZID=Europe/Paris:20270420T090000',
+      'EXDATE;TZID=Europe/Paris:20270417T090000',
+      'SUMMARY:Webcal series',
+      'END:VEVENT',
+      'END:VCALENDAR'
+    ].join('\r\n');
+
+    const imported = await agent
+      .post('/api/import/ics')
+      .set('X-CSRF-Token', csrf)
+      .send({ userId, content });
+    expect(imported.status).toBe(201);
+    expect(imported.body.imported).toBe(1);
+
+    const occurrences = await agent.get(
+      '/api/events?start=2027-04-01T00:00:00.000Z&end=2027-05-01T00:00:00.000Z'
+    );
+    const starts = (occurrences.body as any[]).map((event) => event.occurrenceStart).sort();
+    expect(starts).toEqual([
+      '2027-04-10T07:00:00.000Z',
+      '2027-04-20T07:00:00.000Z',
+      '2027-04-24T07:00:00.000Z'
+    ]);
+
+    const exported = await agent.get('/api/export/ics');
+    expect(exported.status).toBe(200);
+    const text = exported.text as string;
+    expect(text).toContain('UID:webcal-1');
+    expect(text).not.toContain('UID:import:');
+    expect(text).toContain('RRULE:FREQ=WEEKLY;COUNT=3');
+    expect(text).toContain('RDATE;TZID=Europe/Paris:20270420T090000');
+    expect(text).toContain('EXDATE;TZID=Europe/Paris:20270417T090000');
+
+    const reimported = await agent
+      .post('/api/import/ics')
+      .set('X-CSRF-Token', csrf)
+      .send({ userId, content: text });
+    expect(reimported.status).toBe(201);
+    expect(reimported.body.imported).toBe(0);
+    expect(reimported.body.updated).toBe(1);
+    const afterReimport = await agent.get(
+      '/api/events?start=2027-04-01T00:00:00.000Z&end=2027-05-01T00:00:00.000Z'
+    );
+    expect(afterReimport.body).toHaveLength(3);
   });
 
   it('keeps deleted events for the audit log', async () => {

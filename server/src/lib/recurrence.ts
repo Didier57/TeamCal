@@ -58,6 +58,16 @@ export function parseEventOccurrenceId(value: string): { eventId: string; occurr
   return { eventId: value.slice(0, index), occurrenceStart: value.slice(index + 2) };
 }
 
+export function parseEventRdates(event: EventRow): string[] {
+  if (!event.rdates) return [];
+  try {
+    const parsed = JSON.parse(event.rdates);
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 function baseOccurrence(event: EventRow): Occurrence {
   return {
     id: event.id,
@@ -77,7 +87,7 @@ function baseOccurrence(event: EventRow): Occurrence {
     visibility: event.visibility,
     categoryId: event.category_id,
     rrule: event.rrule,
-    recurring: Boolean(event.rrule),
+    recurring: Boolean(event.rrule || parseEventRdates(event).length),
     occurrenceStart: event.start_at,
     isException: false,
     status: event.status,
@@ -96,7 +106,8 @@ export function expandEvent(
   const exceptionByStart = new Map(exceptions.map((e) => [e.occurrence_start, e]));
   const duration = new Date(event.end_at).getTime() - new Date(event.start_at).getTime();
 
-  if (!event.rrule) {
+  const rdates = parseEventRdates(event);
+  if (!event.rrule && rdates.length === 0) {
     const start = new Date(event.start_at);
     const end = new Date(event.end_at);
     if (end < from || start > to) return [];
@@ -104,23 +115,40 @@ export function expandEvent(
   }
 
   const timezone = event.timezone || 'UTC';
-  const startWall = wallClockAsUtc(new Date(event.start_at), timezone);
-  let rule: RRule;
-  try {
-    rule = new RRule({
-      ...RRule.parseString(event.rrule.replace(/^RRULE:/i, '')),
-      dtstart: startWall
-    });
-  } catch {
-    return [];
+  const originalStarts: string[] = [];
+  if (rdates.length > 0) {
+    originalStarts.push(
+      event.all_day
+        ? `${event.start_at.slice(0, 10)}T00:00:00.000Z`
+        : new Date(event.start_at).toISOString()
+    );
   }
-  const fromWall = wallClockAsUtc(new Date(from.getTime() - 86400000), timezone);
-  const toWall = wallClockAsUtc(new Date(to.getTime() + 86400000), timezone);
-  const occurrences = rule.between(fromWall, toWall, true).slice(0, limit);
+  if (event.rrule) {
+    const startWall = wallClockAsUtc(new Date(event.start_at), timezone);
+    let rule: RRule | null = null;
+    try {
+      rule = new RRule({
+        ...RRule.parseString(event.rrule.replace(/^RRULE:/i, '')),
+        dtstart: startWall
+      });
+    } catch {
+      rule = null;
+    }
+    if (rule) {
+      const fromWall = wallClockAsUtc(new Date(from.getTime() - 86400000), timezone);
+      const toWall = wallClockAsUtc(new Date(to.getTime() + 86400000), timezone);
+      for (const occurrence of rule.between(fromWall, toWall, true).slice(0, limit)) {
+        originalStarts.push(utcAsWallClock(occurrence, timezone).toISOString());
+      }
+    }
+  }
+  for (const key of rdates) {
+    const date = new Date(key);
+    if (!Number.isNaN(date.getTime())) originalStarts.push(date.toISOString());
+  }
   const result: Occurrence[] = [];
-  for (const occurrence of occurrences) {
-    const realStart = utcAsWallClock(occurrence, timezone);
-    const originalStart = realStart.toISOString();
+  for (const originalStart of [...new Set(originalStarts)].sort()) {
+    const realStart = new Date(originalStart);
     const exception = exceptionByStart.get(originalStart);
     if (exception?.action === 'cancelled') continue;
     let start = realStart;

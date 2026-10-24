@@ -183,6 +183,7 @@ export interface RawIcsEvent {
   timezone: string;
   rrule?: string | null;
   exdates?: string[];
+  rdates?: string[];
   recurrenceId?: string | null;
   categories?: string[];
   stamp?: string | Date;
@@ -294,7 +295,7 @@ export function buildRawIcs(calendarName: string, events: RawIcsEvent[]): string
   const timeZones = new Set<string>();
   for (const event of events) {
     if (!event.allDay) timeZones.add(resolveTimeZone(event.timezone));
-    for (const value of [event.start, event.end, event.recurrenceId]) {
+    for (const value of [event.start, event.end, event.recurrenceId, ...(event.rdates ?? [])]) {
       const year = yearOf(value);
       if (year) years.push(year);
     }
@@ -327,6 +328,11 @@ export function buildRawIcs(calendarName: string, events: RawIcsEvent[]): string
       const values = event.exdates.map((value) => dateProperty(value, event.allDay, timeZone));
       const params = values[0].params;
       lines.push(`EXDATE${params}:${values.map((value) => value.value).join(',')}`);
+    }
+    if (event.rdates?.length) {
+      const values = event.rdates.map((value) => dateProperty(value, event.allDay, timeZone));
+      const params = values[0].params;
+      lines.push(`RDATE${params}:${values.map((value) => value.value).join(',')}`);
     }
     lines.push(`SUMMARY:${escapeText(event.title)}`);
     if (event.description) lines.push(`DESCRIPTION:${escapeText(event.description)}`);

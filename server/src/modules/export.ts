@@ -4,6 +4,7 @@ import { requireAuth } from '../lib/auth';
 import { buildRawIcs, type RawIcsEvent } from '../lib/ics';
 import type { EventRow } from '../lib/permissions';
 import type { ExceptionRow, OverrideData } from '../lib/recurrence';
+import { parseEventRdates } from '../lib/recurrence';
 import { cleanDescription } from '../lib/sanitize';
 import { addDays } from '../lib/time';
 import { asyncHandler, HttpError } from '../lib/util';
@@ -21,6 +22,11 @@ function allDayDuration(event: EventRow): number {
   const start = new Date(`${event.start_at.slice(0, 10)}T00:00:00.000Z`).getTime();
   const end = new Date(`${event.end_at.slice(0, 10)}T00:00:00.000Z`).getTime();
   return Math.max(0, Math.round((end - start) / 86400000));
+}
+
+function originalUid(uid: string): string {
+  const match = /^import:[^:]+:(.+)$/s.exec(uid);
+  return match ? match[1] : uid;
 }
 
 export function exportRoutes(): Router {
@@ -78,6 +84,8 @@ export function exportRoutes(): Router {
       for (const event of events) {
         const eventAllDay = Boolean(event.all_day);
         const timeZone = eventAllDay ? 'UTC' : event.timezone || 'UTC';
+        const rdates = parseEventRdates(event);
+        const recurring = Boolean(event.rrule || rdates.length);
         const exdates: string[] = [];
         const overrides: RawIcsEvent[] = [];
 
@@ -106,7 +114,7 @@ export function exportRoutes(): Router {
           const categoryId = override.categoryId ?? event.category_id;
           const categoryName = categoryId ? categoryNames.get(categoryId) : event.category_name;
           overrides.push({
-            uid: event.uid,
+            uid: originalUid(event.uid),
             sequence: event.sequence,
             title: override.title ?? event.title,
             description: cleanDescription(override.description ?? event.description, false),
@@ -123,7 +131,7 @@ export function exportRoutes(): Router {
         }
 
         items.push({
-          uid: event.uid,
+          uid: originalUid(event.uid),
           sequence: event.sequence,
           title: event.title,
           description: cleanDescription(event.description, false),
@@ -134,11 +142,12 @@ export function exportRoutes(): Router {
           allDay: eventAllDay,
           timezone: timeZone,
           rrule: event.rrule,
-          exdates: event.rrule ? exdates : undefined,
+          exdates: recurring ? exdates : undefined,
+          rdates: rdates.length ? rdates : undefined,
           categories: event.category_name ? [event.category_name] : undefined,
           stamp: event.updated_at
         });
-        if (event.rrule) items.push(...overrides);
+        if (recurring) items.push(...overrides);
       }
 
       const settings = new SettingsStore(req.db).get();

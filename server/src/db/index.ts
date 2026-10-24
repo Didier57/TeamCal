@@ -196,6 +196,10 @@ CREATE INDEX idx_holiday_adjustments_country ON holiday_adjustments(country);
 ALTER TABLE events ADD COLUMN deleted_at TEXT;
 ALTER TABLE events ADD COLUMN deleted_by TEXT;
 `
+  },
+  {
+    id: 7,
+    sql: `ALTER TABLE events ADD COLUMN rdates TEXT;`
   }
 ];
 
