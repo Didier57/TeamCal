@@ -42,7 +42,9 @@ export function viewRoutes(): Router {
         .prepare(
           `SELECT v.*, (u.first_name || ' ' || u.last_name) AS owner_name
            FROM custom_views v JOIN users u ON u.id = v.owner_id
-           WHERE v.owner_id = ? OR v.is_shared = 1 OR ? = 1
+           WHERE v.owner_id = ?
+              OR v.is_shared = 1
+              OR (? = 1 AND v.is_default_personal = 0)
            ORDER BY v.name COLLATE NOCASE`
         )
         .all(user.id, user.is_admin ? 1 : 0);

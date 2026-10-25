@@ -1403,8 +1403,24 @@ describe('TeamCal API', () => {
     const erinId = created.body.id as string;
     expect(created.body.defaultView).toMatch(/^view:/);
 
+    const tokenRow = db
+      .prepare('SELECT password_token FROM users WHERE id = ?')
+      .get(erinId) as { password_token: string };
+    await request(app)
+      .post('/api/auth/reset-password')
+      .send({ token: tokenRow.password_token, password: 'ErinPassword123!' });
+    const erinAgent = request.agent(app);
+    const erinLogin = await erinAgent
+      .post('/api/auth/login')
+      .send({ username: 'erin', password: 'ErinPassword123!' });
+    expect(erinLogin.status).toBe(200);
+
     let views = await agent.get('/api/views');
-    let erinPersonal = views.body.find(
+    expect(
+      views.body.some((view: any) => view.ownerId === erinId && view.isDefaultPersonal)
+    ).toBe(false);
+    let erinViews = await erinAgent.get('/api/views');
+    let erinPersonal = erinViews.body.find(
       (view: any) => view.ownerId === erinId && view.isDefaultPersonal
     );
     expect(erinPersonal.name).toBe('My Planning');
@@ -1414,8 +1430,8 @@ describe('TeamCal API', () => {
       .set('X-CSRF-Token', csrf)
       .send({ language: 'de' });
     expect(renamed.status).toBe(200);
-    views = await agent.get('/api/views');
-    erinPersonal = views.body.find(
+    erinViews = await erinAgent.get('/api/views');
+    erinPersonal = erinViews.body.find(
       (view: any) => view.ownerId === erinId && view.isDefaultPersonal
     );
     expect(erinPersonal.name).toBe('Meine Planung');
@@ -1424,8 +1440,8 @@ describe('TeamCal API', () => {
     db.prepare('DELETE FROM custom_views WHERE owner_id = ? AND is_default_personal = 1').run(erinId);
     db.prepare('DELETE FROM schema_migrations WHERE id = 13').run();
     runMigrations(db);
-    views = await agent.get('/api/views');
-    erinPersonal = views.body.find(
+    erinViews = await erinAgent.get('/api/views');
+    erinPersonal = erinViews.body.find(
       (view: any) => view.ownerId === erinId && view.isDefaultPersonal
     );
     expect(erinPersonal.name).toBe('Meine Planung');
