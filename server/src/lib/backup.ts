@@ -15,6 +15,7 @@ import { zonedParts } from './time';
 const BACKUP_NAME = /^teamcal_\d{4}-\d{2}-\d{2}_\d{6}\.sqlite$/;
 const TABLE_NAMES = [
   'users',
+  'sessions',
   'settings',
   'categories',
   'calendars',
@@ -26,7 +27,9 @@ const TABLE_NAMES = [
   'custom_view_users',
   'audit_log',
   'email_log',
-  'holiday_adjustments'
+  'holiday_adjustments',
+  'app_secrets',
+  'push_subscriptions'
 ];
 
 export interface BackupFile {
@@ -232,6 +235,32 @@ function validateImportedDatabase(db: DB, file: string) {
   }
 }
 
+function removeOrphanRows(db: DB): number {
+  let removedTotal = 0;
+  for (let pass = 0; pass < 4; pass += 1) {
+    let removed = 0;
+    for (const table of TABLE_NAMES) {
+      const keys = db
+        .prepare(`PRAGMA foreign_key_list(${quote(table)})`)
+        .all() as { table: string; from: string; to: string | null }[];
+      for (const key of keys) {
+        const parentColumn = key.to ?? 'id';
+        const result = db
+          .prepare(
+            `DELETE FROM main.${quote(table)}
+             WHERE ${quote(key.from)} IS NOT NULL
+               AND ${quote(key.from)} NOT IN (SELECT ${quote(parentColumn)} FROM main.${quote(key.table)})`
+          )
+          .run();
+        removed += result.changes;
+      }
+    }
+    removedTotal += removed;
+    if (removed === 0) break;
+  }
+  return removedTotal;
+}
+
 export function restoreLocalDatabase(db: DB, file: string): Promise<void> {
   return enqueue(() => restoreDatabase(db, file));
 }
@@ -251,6 +280,8 @@ export async function restoreDatabase(db: DB, file: string): Promise<void> {
           `INSERT INTO main.${quote(table)} (${columnList}) SELECT ${columnList} FROM restore.${quote(table)}`
         ).run();
       }
+      const removed = removeOrphanRows(db);
+      if (removed > 0) logger.warn('backup_orphan_rows_removed', { rows: removed });
       const violations = db.prepare('PRAGMA foreign_key_check').all();
       if (violations.length) throw new Error('backup_foreign_key_error');
     })();

@@ -1490,6 +1490,13 @@ describe('TeamCal API', () => {
 
     const file = path.join(os.tmpdir(), `teamcal-test-${Date.now()}.sqlite`);
     fs.writeFileSync(file, snapshot);
+    const orphanTime = new Date().toISOString();
+    db.pragma('foreign_keys = OFF');
+    db.prepare(
+      `INSERT INTO sessions (id, user_id, csrf_token, created_at, last_seen_at, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run('ghost-session', 'missing-user', 'token', orphanTime, orphanTime, orphanTime);
+    db.pragma('foreign_keys = ON');
     try {
       const restored = await admin
         .post('/api/backups/import')
@@ -1508,6 +1515,9 @@ describe('TeamCal API', () => {
       }[]
     ).map((row) => row.title);
     expect(titles).toEqual(['Backup before']);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM sessions WHERE id = 'ghost-session'").get()).toEqual({
+      count: 0
+    });
     expect(new SettingsStore(db).get().backup.password).toBe('Secret123!');
     const me = await admin.get('/api/auth/me');
     expect(me.status).toBe(200);
