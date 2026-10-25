@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../lib/auth';
-import { sendTestPush } from '../lib/push';
+import { requireAdmin, requireAuth } from '../lib/auth';
+import { regenerateVapidKeys, sendTestPush } from '../lib/push';
 import { logger } from '../lib/logger';
 import { SettingsStore } from '../settings';
 import { asyncHandler, newId, nowIso } from '../lib/util';
@@ -76,6 +76,15 @@ export function pushRoutes(): Router {
         .prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?')
         .run(body.endpoint, req.user!.id);
       res.json({ ok: true });
+    })
+  );
+
+  router.post(
+    '/regenerate',
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const vapidPublicKey = regenerateVapidKeys(req.db);
+      res.json({ ok: true, vapidPublicKey });
     })
   );
 

@@ -1416,6 +1416,19 @@ describe('TeamCal API', () => {
     const testPush = await agent.post('/api/push/test').set('X-CSRF-Token', csrf).send({});
     expect(testPush.status).toBe(200);
     expect(testPush.body).toEqual({ subscriptions: 0, sent: 0, failed: 0 });
+
+    const previousKey = settings.body.vapidPublicKey as string;
+    await agent
+      .post('/api/push/subscribe')
+      .set('X-CSRF-Token', csrf)
+      .send({ subscription: { endpoint, keys: { p256dh: 'p256dh-value', auth: 'auth-value' } } });
+    const regenerated = await agent.post('/api/push/regenerate').set('X-CSRF-Token', csrf).send({});
+    expect(regenerated.status).toBe(200);
+    expect(typeof regenerated.body.vapidPublicKey).toBe('string');
+    expect(regenerated.body.vapidPublicKey).not.toBe(previousKey);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM push_subscriptions').get()).toEqual({ count: 0 });
+    const refreshed = await agent.get('/api/settings/public');
+    expect(refreshed.body.vapidPublicKey).toBe(regenerated.body.vapidPublicKey);
   });
 
   it('exports and restores the database while keeping the backup password', async () => {

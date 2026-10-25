@@ -263,6 +263,14 @@ const fr: Record<string, string> = {
   'admin.defaultView': 'Vue par défaut',
   'admin.sessionDays': 'Durée de session (jours)',
   'admin.fieldsTitle': "Champs d'événement",
+  'admin.pushTitle': 'Notifications push',
+  'admin.pushHelp':
+    'Si l’adresse de l’application change (nouveau domaine), générez une nouvelle clé push puis demandez aux utilisateurs de réactiver les notifications dans leurs préférences. Tous les abonnements existants seront supprimés.',
+  'admin.pushRegenerate': 'Générer une nouvelle clé push',
+  'admin.pushRegenerateConfirm':
+    'Générer une nouvelle clé push ? Tous les appareils devront réactiver les notifications.',
+  'admin.pushRegenerateDone':
+    'Nouvelle clé push générée. Les utilisateurs doivent réactiver les notifications sur chaque appareil.',
   'admin.fieldLocation': 'Lieu',
   'admin.fieldUrl': 'URL',
   'admin.fieldPriority': 'Priorité',
@@ -817,6 +825,14 @@ const en: Record<string, string> = {
   'admin.defaultView': 'Default view',
   'admin.sessionDays': 'Session duration (days)',
   'admin.fieldsTitle': 'Event fields',
+  'admin.pushTitle': 'Push notifications',
+  'admin.pushHelp':
+    'If the application address changes (new domain), generate a new push key, then ask users to re-enable notifications in their preferences. All existing subscriptions will be removed.',
+  'admin.pushRegenerate': 'Generate a new push key',
+  'admin.pushRegenerateConfirm':
+    'Generate a new push key? Every device will need to re-enable notifications.',
+  'admin.pushRegenerateDone':
+    'New push key generated. Users must re-enable notifications on each device.',
   'admin.fieldLocation': 'Location',
   'admin.fieldUrl': 'URL',
   'admin.fieldPriority': 'Priority',
@@ -1370,6 +1386,14 @@ const de: Record<string, string> = {
   'admin.defaultView': 'Standardansicht',
   'admin.sessionDays': 'Sitzungsdauer (Tage)',
   'admin.fieldsTitle': 'Terminfelder',
+  'admin.pushTitle': 'Push-Benachrichtigungen',
+  'admin.pushHelp':
+    'Wenn sich die Adresse der Anwendung ändert (neue Domain), erzeugen Sie einen neuen Push-Schlüssel und bitten Sie die Benutzer, die Benachrichtigungen in ihren Einstellungen erneut zu aktivieren. Alle bestehenden Abonnements werden entfernt.',
+  'admin.pushRegenerate': 'Neuen Push-Schlüssel erzeugen',
+  'admin.pushRegenerateConfirm':
+    'Neuen Push-Schlüssel erzeugen? Alle Geräte müssen die Benachrichtigungen erneut aktivieren.',
+  'admin.pushRegenerateDone':
+    'Neuer Push-Schlüssel erzeugt. Benutzer müssen die Benachrichtigungen auf jedem Gerät erneut aktivieren.',
   'admin.fieldLocation': 'Ort',
   'admin.fieldUrl': 'URL',
   'admin.fieldPriority': 'Priorität',

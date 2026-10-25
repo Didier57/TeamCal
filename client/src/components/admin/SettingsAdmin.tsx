@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiGet, apiPut, ApiError } from '../../api';
+import { apiGet, apiPost, apiPut, ApiError } from '../../api';
 import { useAuth } from '../../app-context';
 import { languageLabel, useI18n } from '../../i18n';
 import type { AdminSettings, Language, ViewKind } from '../../types';
@@ -28,6 +28,9 @@ export function SettingsAdmin() {
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [vapidBusy, setVapidBusy] = useState(false);
+  const [vapidFlash, setVapidFlash] = useState<string | null>(null);
+  const [vapidError, setVapidError] = useState<string | null>(null);
 
   useEffect(() => {
     apiGet<AdminSettings>('/settings')
@@ -87,6 +90,22 @@ export function SettingsAdmin() {
 
   const weekdayName = (day: number) =>
     new Intl.DateTimeFormat(locale, { weekday: 'long' }).format(new Date(Date.UTC(2024, 0, 7 + day)));
+
+  async function regeneratePush() {
+    if (!window.confirm(t('admin.pushRegenerateConfirm'))) return;
+    setVapidBusy(true);
+    setVapidError(null);
+    setVapidFlash(null);
+    try {
+      await apiPost('/push/regenerate', {});
+      await refresh();
+      setVapidFlash(t('admin.pushRegenerateDone'));
+    } catch (err) {
+      setVapidError(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
+    } finally {
+      setVapidBusy(false);
+    }
+  }
 
   return (
     <div className="admin-section">
@@ -267,6 +286,21 @@ export function SettingsAdmin() {
             <input value={visibilities} onChange={(event) => setVisibilities(event.target.value)} />
           </label>
         </div>
+      </div>
+
+      <div className="panel">
+        <h3>{t('admin.pushTitle')}</h3>
+        <p className="hint">{t('admin.pushHelp')}</p>
+        {vapidFlash && <div className="alert info">{vapidFlash}</div>}
+        {vapidError && <div className="alert error">{vapidError}</div>}
+        <button
+          type="button"
+          className="button"
+          disabled={vapidBusy}
+          onClick={() => void regeneratePush()}
+        >
+          {t('admin.pushRegenerate')}
+        </button>
       </div>
     </div>
   );

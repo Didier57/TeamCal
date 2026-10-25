@@ -57,6 +57,16 @@ export function getVapidPublicKey(db: DB): string {
   return ensureVapidKeys(db).publicKey;
 }
 
+export function regenerateVapidKeys(db: DB): string {
+  const removedSubscriptions = db.transaction(() => {
+    db.prepare("DELETE FROM app_secrets WHERE key IN ('vapid_public_key', 'vapid_private_key')").run();
+    return db.prepare('DELETE FROM push_subscriptions').run().changes;
+  })();
+  const keys = ensureVapidKeys(db);
+  logger.warn('vapid_keys_regenerated', { removedSubscriptions });
+  return keys.publicKey;
+}
+
 function localeOf(language: string | null): string {
   return language === 'de' ? 'de-DE' : language === 'en' ? 'en-GB' : 'fr-FR';
 }
