@@ -134,9 +134,7 @@ export function PreferencesPage() {
       typeof Notification !== 'undefined' &&
       Notification.permission === 'granted'
     ) {
-      void ensurePushSubscription().catch((err) => {
-        setPushError(`${t('prefs.pushFailed')} (${pushErrorMessage(err)})`);
-      });
+      void ensurePushSubscription().catch(() => undefined);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.notifyNewEvents, settings?.vapidPublicKey]);
