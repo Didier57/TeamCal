@@ -14,7 +14,12 @@ interface Props {
   timeZone: string;
   onCreate: (calendarId: string, start: Date, end: Date, allDay: boolean) => void;
   onEdit: (occurrence: Occurrence) => void;
-  onMove: (occurrence: Occurrence, start: string, end: string, targetCalendarId?: string) => void;
+  onMove: (
+    occurrence: Occurrence,
+    targetKey: string,
+    targetHour: number | undefined,
+    targetCalendarId: string
+  ) => void;
 }
 
 function utcDateFromKey(key: string): Date {
@@ -330,24 +335,7 @@ export function PlanningGrid({
     const occurrence = dragged.current;
     dragged.current = null;
     if (!occurrence) return;
-    let start: string;
-    let end: string;
-    if (occurrence.allDay) {
-      const startKey = occurrence.start.slice(0, 10);
-      const endKey = occurrence.end.slice(0, 10);
-      const durationDays =
-        Math.max(1, Math.round((utcDateFromKey(endKey).getTime() - utcDateFromKey(startKey).getTime()) / 86400000) + 1);
-      start = targetKey;
-      end = addDaysToKey(targetKey, durationDays - 1);
-    } else {
-      const duration = new Date(occurrence.end).getTime() - new Date(occurrence.start).getTime();
-      const originalTime = toDateTimeInput(occurrence.start, timeZone).slice(11, 16);
-      const time = hour === undefined ? originalTime : `${pad(hour)}:00`;
-      const startIso = wallTimeToUtc(`${targetKey}T${time}`, timeZone);
-      start = startIso;
-      end = new Date(new Date(startIso).getTime() + duration).toISOString();
-    }
-    onMove(occurrence, start, end, calendarId);
+    onMove(occurrence, targetKey, hour, calendarId);
   }
 
   function createInCell(calendar: Calendar, key: string, hour?: number) {

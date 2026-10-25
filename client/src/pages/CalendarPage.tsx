@@ -4,7 +4,7 @@ import { PlanningGrid } from '../components/PlanningGrid';
 import { apiGet, apiPatch, apiPut, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { useI18n } from '../i18n';
-import { formatDate, toDateInput, toDateTimeInput } from '../format';
+import { addDaysToDateKey, formatDate, toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
 import type {
   Calendar,
   Category,
@@ -423,15 +423,66 @@ export function CalendarPage() {
     });
   }
 
+  function movedParticipants(occurrence: Occurrence, targetCalendarId: string): string[] {
+    const participants = [...(occurrence.participantIds ?? [])];
+    const source = calendars.find((calendar) => calendar.id === occurrence.calendarId);
+    const target = calendars.find((calendar) => calendar.id === targetCalendarId);
+    if (!source || !target || source.ownerId === target.ownerId) return participants;
+    const index = participants.indexOf(source.ownerId);
+    if (index >= 0) participants[index] = target.ownerId;
+    return participants;
+  }
+
   async function handleMove(
     occurrence: Occurrence,
-    start: string,
-    end: string,
-    targetCalendarId?: string
+    targetKey: string,
+    targetHour: number | undefined,
+    targetCalendarId: string
   ) {
+    const wantsHours = window.confirm(t('calendar.changeHoursQuestion'));
+    const calendarChanged = targetCalendarId !== occurrence.calendarId;
+    const participantIds = movedParticipants(occurrence, targetCalendarId);
+    const startKey = occurrence.start.slice(0, 10);
+    const endKey = occurrence.end.slice(0, 10);
+    const durationDays = occurrence.allDay
+      ? Math.max(
+          1,
+          Math.round(
+            (Date.parse(`${endKey}T00:00:00Z`) - Date.parse(`${startKey}T00:00:00Z`)) / 86400000
+          ) + 1
+        )
+      : 0;
+    const durationMs = occurrence.allDay
+      ? 0
+      : new Date(occurrence.end).getTime() - new Date(occurrence.start).getTime();
+    const originalTime = occurrence.allDay
+      ? ''
+      : toDateTimeInput(occurrence.start, timeZone).slice(11, 16);
+    const time =
+      targetHour === undefined ? originalTime : `${String(targetHour).padStart(2, '0')}:00`;
+    const start = occurrence.allDay
+      ? targetKey
+      : wallTimeToUtc(`${targetKey}T${time}`, timeZone);
+    const end = occurrence.allDay
+      ? addDaysToDateKey(targetKey, durationDays - 1)
+      : new Date(new Date(start).getTime() + durationMs).toISOString();
+
+    if (wantsHours) {
+      const draft: EventDraft = {
+        ...draftFromOccurrence(occurrence, timeZone),
+        calendarId: targetCalendarId,
+        startInput: occurrence.allDay ? start : `${targetKey}T${time}`,
+        endInput: occurrence.allDay ? end : toDateTimeInput(end, timeZone),
+        participantIds
+      };
+      setDialog({ mode: 'edit', occurrence, draft });
+      return;
+    }
+
     const body: Record<string, unknown> = { start, end };
-    if (targetCalendarId && targetCalendarId !== occurrence.calendarId) {
+    if (calendarChanged) {
       body.calendarId = targetCalendarId;
+      body.participantIds = participantIds;
     }
     if (occurrence.recurring) {
       const occurrenceOnly = window.confirm(t('calendar.editOccurrenceQuestion'));
@@ -439,6 +490,7 @@ export function CalendarPage() {
       if (occurrenceOnly) {
         body.occurrenceStart = occurrence.occurrenceStart;
         delete body.calendarId;
+        delete body.participantIds;
       }
     }
     const patch = (force = false) =>
@@ -601,8 +653,8 @@ export function CalendarPage() {
             timeZone={timeZone}
             onCreate={(calendarId, start, end, allDay) => openCreate(calendarId, start, end, allDay)}
             onEdit={openEdit}
-            onMove={(occurrence, start, end, targetCalendarId) =>
-              void handleMove(occurrence, start, end, targetCalendarId)
+            onMove={(occurrence, targetKey, targetHour, targetCalendarId) =>
+              void handleMove(occurrence, targetKey, targetHour, targetCalendarId)
             }
           />
         )}
