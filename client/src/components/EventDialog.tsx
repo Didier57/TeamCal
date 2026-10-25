@@ -100,6 +100,7 @@ export function EventDialog({
   const creating = mode === 'create' || duplicating;
   const isRecurring = Boolean(!creating && occurrence?.recurring);
   const canDelete = Boolean(!creating && occurrence?.deletable);
+  const readOnly = Boolean(!creating && occurrence && !occurrence.editable);
 
   const availableCalendars = useMemo(
     () => calendars.filter((calendar) => (creating ? calendar.canCreate : calendar.canEdit)),
@@ -252,6 +253,7 @@ export function EventDialog({
 
   function onSubmit(event: FormEvent) {
     event.preventDefault();
+    if (readOnly) return;
     if (isRecurring) {
       setPending('save');
       return;
@@ -323,6 +325,7 @@ export function EventDialog({
         </div>
         <form onSubmit={onSubmit}>
           <div className="modal-body">
+            {readOnly && <div className="alert info">{t('event.readOnly')}</div>}
             {pending && (
               <div className="scope-panel">
                 <p>
@@ -647,9 +650,11 @@ export function EventDialog({
             <button type="button" className="button ghost" onClick={onClose} disabled={busy}>
               {t('common.cancel')}
             </button>
-            <button type="submit" className="button primary" disabled={busy}>
-              {busy ? t('event.saving') : t('event.save')}
-            </button>
+            {!readOnly && (
+              <button type="submit" className="button primary" disabled={busy}>
+                {busy ? t('event.saving') : t('event.save')}
+              </button>
+            )}
           </div>
         </form>
       </div>
