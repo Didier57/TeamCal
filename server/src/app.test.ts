@@ -168,7 +168,7 @@ describe('TeamCal API', () => {
     expect(third.status).toBe(201);
   });
 
-  it('only lists users whose calendar the requester can view', async () => {
+  it('only lists users and calendars the requester has rights on', async () => {
     const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
     const bobCreated = await admin
       .post('/api/users')
@@ -206,6 +206,17 @@ describe('TeamCal API', () => {
     );
 
     const adminCalendars = await admin.get('/api/calendars');
+    const adminCalendarOwners = adminCalendars.body.map((c: any) => c.ownerId);
+    expect(adminCalendarOwners).toContain(adminId);
+    expect(adminCalendarOwners).not.toContain(bobId);
+    expect(adminCalendarOwners).not.toContain(maryseId);
+    const allCalendarsAsBob = await bob.get('/api/calendars/all');
+    expect(allCalendarsAsBob.status).toBe(403);
+    const allCalendarsAsAdmin = await admin.get('/api/calendars/all');
+    expect(allCalendarsAsAdmin.body.map((c: any) => c.ownerId)).toEqual(
+      expect.arrayContaining([adminId, bobId, maryseId])
+    );
+
     const adminCalendar = adminCalendars.body.find((c: any) => c.ownerId === adminId);
     const acl = await admin
       .put(`/api/calendars/${adminCalendar.id}/acl`)
@@ -447,7 +458,7 @@ describe('TeamCal API', () => {
       });
     expect(created.status).toBe(201);
 
-    const calendars = await agent.get('/api/calendars');
+    const calendars = await agent.get('/api/calendars/all');
     const adminCalendar = calendars.body.find((c: any) => c.ownerName === 'Ada Admin');
     const bobCalendar = calendars.body.find((c: any) => c.ownerId === created.body.id);
     expect(adminCalendar).toBeTruthy();
@@ -518,7 +529,7 @@ describe('TeamCal API', () => {
     expect(created.status).toBe(201);
     const bobId = created.body.id as string;
 
-    const calendars = await agent.get('/api/calendars');
+    const calendars = await agent.get('/api/calendars/all');
     const adminCalendar = calendars.body.find((calendar: any) => calendar.ownerName === 'Ada Admin');
     const bobCalendar = calendars.body.find((calendar: any) => calendar.ownerId === bobId);
     expect(adminCalendar).toBeTruthy();
@@ -778,7 +789,7 @@ describe('TeamCal API', () => {
         password: 'Password123!'
       });
     const bobId = created.body.id as string;
-    const calendars = await agent.get('/api/calendars');
+    const calendars = await agent.get('/api/calendars/all');
     const bobCalendar = calendars.body.find((calendar: any) => calendar.ownerId === bobId);
     expect(bobCalendar).toBeTruthy();
 
@@ -869,7 +880,7 @@ describe('TeamCal API', () => {
     expect(created.status).toBe(201);
     const bobId = created.body.id as string;
 
-    const calendars = await admin.get('/api/calendars');
+    const calendars = await admin.get('/api/calendars/all');
     const bobCalendar = calendars.body.find((calendar: any) => calendar.ownerId === bobId);
     const adminCalendar = calendars.body.find((calendar: any) => calendar.ownerId === adminId);
     expect(bobCalendar).toBeTruthy();

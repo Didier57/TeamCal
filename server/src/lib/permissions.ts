@@ -22,10 +22,15 @@ export function getCalendar(db: DB, calendarId: string): CalendarRow | undefined
   return db.prepare('SELECT * FROM calendars WHERE id = ?').get(calendarId) as CalendarRow | undefined;
 }
 
-export function calendarAccess(db: DB, user: UserRow, calendarId: string): CalendarAccess | null {
+export function calendarAccess(
+  db: DB,
+  user: UserRow,
+  calendarId: string,
+  adminOverride = true
+): CalendarAccess | null {
   const calendar = getCalendar(db, calendarId);
   if (!calendar) return null;
-  if (user.is_admin || calendar.owner_id === user.id) {
+  if ((adminOverride && user.is_admin) || calendar.owner_id === user.id) {
     return { calendar, isOwner: calendar.owner_id === user.id, canView: true, canCreate: true, canEdit: true, canDelete: true };
   }
   const acl = db

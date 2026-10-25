@@ -32,7 +32,7 @@ export function PermissionsAdmin() {
   );
 
   useEffect(() => {
-    Promise.all([apiGet<Calendar[]>('/calendars'), apiGet<User[]>('/users/all')])
+    Promise.all([apiGet<Calendar[]>('/calendars/all'), apiGet<User[]>('/users/all')])
       .then(([calendarList, userList]) => {
         setCalendars(calendarList);
         setUsers(userList);

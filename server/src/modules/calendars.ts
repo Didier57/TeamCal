@@ -51,8 +51,8 @@ export function calendarRoutes(): Router {
       }[];
       const result = [];
       for (const row of rows) {
-        const access = calendarAccess(req.db, user, row.id);
-        if (!access || (!access.canView && !user.is_admin)) continue;
+        const access = calendarAccess(req.db, user, row.id, false);
+        if (!access || !access.canView) continue;
         result.push({
           id: row.id,
           ownerId: row.owner_id,
@@ -69,6 +69,49 @@ export function calendarRoutes(): Router {
         });
       }
       res.json(result);
+    })
+  );
+
+  router.get(
+    '/all',
+    requireAdmin,
+    asyncHandler(async (req, res) => {
+      const rows = req.db
+        .prepare(
+          `SELECT c.*, u.username, u.first_name, u.last_name, u.is_active
+           FROM calendars c JOIN users u ON u.id = c.owner_id
+           ORDER BY u.first_name, u.last_name, u.username`
+        )
+        .all() as {
+        id: string;
+        owner_id: string;
+        name: string;
+        color: string;
+        created_at: string;
+        username: string;
+        first_name: string;
+        last_name: string;
+        is_active: number;
+      }[];
+      res.json(
+        rows.map((row) => {
+          const access = calendarAccess(req.db, req.user!, row.id);
+          return {
+            id: row.id,
+            ownerId: row.owner_id,
+            ownerUsername: row.username,
+            ownerName: `${row.first_name} ${row.last_name}`.trim() || row.username,
+            ownerActive: Boolean(row.is_active),
+            name: row.name,
+            color: row.color,
+            isOwner: access?.isOwner ?? false,
+            canView: access?.canView ?? false,
+            canCreate: access?.canCreate ?? false,
+            canEdit: access?.canEdit ?? false,
+            canDelete: access?.canDelete ?? false
+          };
+        })
+      );
     })
   );
 
