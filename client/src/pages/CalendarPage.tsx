@@ -180,6 +180,24 @@ export function CalendarPage() {
     );
   }, [requestedViewId, views, calendars]);
 
+  const activeView = useMemo(() => {
+    const requested = requestedViewId && requestedViewId !== 'all' ? requestedViewId : null;
+    const preferred = user?.defaultView?.startsWith('view:')
+      ? user.defaultView.slice('view:'.length)
+      : null;
+    const id = requested ?? preferred;
+    return id ? views.find((customView) => customView.id === id) ?? null : null;
+  }, [requestedViewId, views, user?.defaultView]);
+
+  const activeViewHasAccess = useMemo(
+    () =>
+      !activeView ||
+      activeView.userIds.some((ownerId) =>
+        calendars.some((calendar) => calendar.ownerId === ownerId && calendar.canView)
+      ),
+    [activeView, calendars]
+  );
+
   const firstDay = settings?.firstDay ?? 1;
   const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -663,7 +681,9 @@ export function CalendarPage() {
         {error && <div className="alert error">{error}</div>}
 
         {selected.length === 0 ? (
-          <div className="empty-state">{t('calendar.emptySelection')}</div>
+          <div className="empty-state">
+            {activeView && !activeViewHasAccess ? t('calendar.viewNoAccess') : t('calendar.emptySelection')}
+          </div>
         ) : (
           <PlanningGrid
             view={view}
