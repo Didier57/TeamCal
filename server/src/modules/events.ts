@@ -9,7 +9,7 @@ import {
   getCalendar,
   type EventRow
 } from '../lib/permissions';
-import { notifyEvent } from '../lib/mailer';
+import { notifyEvent, notifyParticipantRemoval } from '../lib/mailer';
 import { sendPushEvent } from '../lib/push';
 import { cleanDescription, isValidHttpUrl } from '../lib/sanitize';
 import { findEventConflicts } from '../lib/conflicts';
@@ -899,6 +899,12 @@ export function eventRoutes(): Router {
       notifyEvent(req.db, settings, updated, 'updated').catch(() =>
         logger.error('notify_failed', { eventId: event.id })
       );
+      const removedParticipants = participantsBefore.filter((userId) => !participants.includes(userId));
+      if (removedParticipants.length > 0) {
+        notifyParticipantRemoval(req.db, settings, updated, removedParticipants).catch(() =>
+          logger.error('notify_removed_failed', { eventId: event.id })
+        );
+      }
       sendPushEvent(req.db, settings, updated, 'updated').catch((error) =>
         logger.error('push_failed', {
           eventId: event.id,

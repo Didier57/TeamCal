@@ -168,6 +168,53 @@ describe('TeamCal API', () => {
     expect(third.status).toBe(201);
   });
 
+  it('notifies a participant removed from an event', async () => {
+    const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
+    const createUser = async (username: string) => {
+      const created = await admin.post('/api/users').set('X-CSRF-Token', csrf).send({
+        username,
+        email: `${username}@example.com`,
+        password: 'Password123!'
+      });
+      expect(created.status).toBe(201);
+      return created.body.id as string;
+    };
+    const bobId = await createUser('bob');
+    const carolId = await createUser('carol');
+    const calendars = await admin.get('/api/calendars');
+    const calendarId = calendars.body.find((calendar: any) => calendar.ownerId === adminId).id as string;
+
+    const created = await admin
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId,
+        title: 'Atelier',
+        start: '2026-03-02T09:00:00.000Z',
+        end: '2026-03-02T10:00:00.000Z',
+        allDay: false,
+        timezone: 'Europe/Paris',
+        participantIds: [bobId, carolId]
+      });
+    expect(created.status).toBe(201);
+
+    db.prepare('DELETE FROM email_log').run();
+    const updated = await admin
+      .patch(`/api/events/${created.body.eventId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ participantIds: [carolId] });
+    expect(updated.status).toBe(200);
+    expect(updated.body.participantIds).toEqual([carolId]);
+
+    const mails = db
+      .prepare('SELECT recipient, status FROM email_log')
+      .all() as { recipient: string; status: string }[];
+    const removedMails = mails.filter((mail) => mail.recipient === 'bob@example.com');
+    expect(removedMails).toHaveLength(1);
+    expect(removedMails[0].status).toBe('skipped');
+    expect(mails.some((mail) => mail.recipient === 'carol@example.com')).toBe(true);
+  });
+
   it('validates event dates and expands recurrences', async () => {
     const { agent, csrf, userId } = await setupAdmin(app);
     const calendars = await agent.get('/api/calendars');

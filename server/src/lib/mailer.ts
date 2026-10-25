@@ -7,7 +7,7 @@ import { buildIcs, googleCalendarUrl } from './ics';
 import { logger } from './logger';
 import { newId, nowIso, randomToken } from './util';
 
-export type MailAction = 'created' | 'updated' | 'cancelled';
+export type MailAction = 'created' | 'updated' | 'cancelled' | 'removed';
 
 interface Recipient {
   id: string;
@@ -24,7 +24,12 @@ function recipientsFor(db: DB, event: EventRow, extraUserIds?: string[]): Recipi
       user_id: string;
     }[]
   ).map((row) => row.user_id);
-  const ids = Array.from(new Set([event.owner_id, ...participantIds, ...(extraUserIds ?? [])]));
+  return recipientsByIds(db, [event.owner_id, ...participantIds, ...(extraUserIds ?? [])]);
+}
+
+function recipientsByIds(db: DB, userIds: string[]): Recipient[] {
+  const ids = Array.from(new Set(userIds));
+  if (ids.length === 0) return [];
   const placeholders = ids.map(() => '?').join(',');
   const rows = db
     .prepare(
@@ -127,6 +132,28 @@ export async function notifyEvent(
 ): Promise<void> {
   const recipients = recipientsFor(db, event, extraUserIds);
   if (recipients.length === 0) return;
+  await deliverEventMails(db, settings, event, action, recipients);
+}
+
+export async function notifyParticipantRemoval(
+  db: DB,
+  settings: AppSettings,
+  event: EventRow,
+  userIds: string[]
+): Promise<void> {
+  if (userIds.length === 0) return;
+  const recipients = recipientsByIds(db, userIds);
+  if (recipients.length === 0) return;
+  await deliverEventMails(db, settings, event, 'removed', recipients);
+}
+
+async function deliverEventMails(
+  db: DB,
+  settings: AppSettings,
+  event: EventRow,
+  action: MailAction,
+  recipients: Recipient[]
+): Promise<void> {
   if (!smtpConfigured(settings)) {
     for (const recipient of recipients) {
       db.prepare(
@@ -154,18 +181,22 @@ export async function notifyEvent(
         ? texts.createdSubject(event.title)
         : action === 'updated'
           ? texts.updatedSubject(event.title)
-          : texts.cancelledSubject(event.title);
+          : action === 'removed'
+            ? texts.removedSubject(event.title)
+            : texts.cancelledSubject(event.title);
     const displayTimeZone = recipient.timezone || event.timezone;
     const when = event.all_day
       ? formatDate(event.start_at, true, displayTimeZone, recipient.language)
       : `${formatDate(event.start_at, false, displayTimeZone, recipient.language)} - ${formatDate(event.end_at, false, displayTimeZone, recipient.language)}`;
-    const attendees = recipients.map((r) => ({
+    const attendeeRecipients =
+      action === 'removed' ? recipients.filter((r) => r.id === recipient.id) : recipients;
+    const attendees = attendeeRecipients.map((r) => ({
       name: r.name,
       email: r.email,
       role: r.id === event.owner_id ? ('CHAIR' as const) : ('REQ-PARTICIPANT' as const),
       partStat: r.id === event.owner_id ? 'ACCEPTED' : 'NEEDS-ACTION'
     }));
-    const method: 'REQUEST' | 'CANCEL' = action === 'cancelled' ? 'CANCEL' : 'REQUEST';
+    const method: 'REQUEST' | 'CANCEL' = action === 'cancelled' || action === 'removed' ? 'CANCEL' : 'REQUEST';
     const ics = buildIcs({
       uid: event.uid,
       sequence: event.sequence,
@@ -180,7 +211,7 @@ export async function notifyEvent(
       rrule: event.rrule,
       organizer: icsOrganizer,
       attendees,
-      cancelled: action === 'cancelled'
+      cancelled: action === 'cancelled' || action === 'removed'
     });
     const gcal = googleCalendarUrl({
       title: event.title,

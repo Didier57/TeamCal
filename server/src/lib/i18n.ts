@@ -4,7 +4,8 @@ export interface EmailTexts {
   createdSubject: (title: string) => string;
   updatedSubject: (title: string) => string;
   cancelledSubject: (title: string) => string;
-  intro: (action: 'created' | 'updated' | 'cancelled') => string;
+  removedSubject: (title: string) => string;
+  intro: (action: 'created' | 'updated' | 'cancelled' | 'removed') => string;
   when: string;
   where: string;
   details: string;
@@ -23,12 +24,15 @@ const texts: Record<EmailLanguage, EmailTexts> = {
     createdSubject: (t) => `Nouvel événement : ${t}`,
     updatedSubject: (t) => `Événement modifié : ${t}`,
     cancelledSubject: (t) => `Événement annulé : ${t}`,
+    removedSubject: (t) => `Retiré de l’événement : ${t}`,
     intro: (a) =>
       a === 'created'
         ? 'Un nouvel événement a été ajouté à votre planning.'
         : a === 'updated'
           ? 'Un événement de votre planning a été modifié.'
-          : 'Un événement de votre planning a été annulé.',
+          : a === 'removed'
+            ? 'Vous ne participez plus à cet événement. Il a été retiré de votre planning.'
+            : 'Un événement de votre planning a été annulé.',
     when: 'Date',
     where: 'Lieu',
     details: 'Description',
@@ -48,12 +52,15 @@ const texts: Record<EmailLanguage, EmailTexts> = {
     createdSubject: (t) => `New event: ${t}`,
     updatedSubject: (t) => `Event updated: ${t}`,
     cancelledSubject: (t) => `Event cancelled: ${t}`,
+    removedSubject: (t) => `Removed from event: ${t}`,
     intro: (a) =>
       a === 'created'
         ? 'A new event has been added to your schedule.'
         : a === 'updated'
           ? 'An event in your schedule has been updated.'
-          : 'An event in your schedule has been cancelled.',
+          : a === 'removed'
+            ? 'You are no longer a participant in this event. It has been removed from your schedule.'
+            : 'An event in your schedule has been cancelled.',
     when: 'Date',
     where: 'Location',
     details: 'Description',
@@ -72,12 +79,15 @@ const texts: Record<EmailLanguage, EmailTexts> = {
     createdSubject: (t) => `Neuer Termin: ${t}`,
     updatedSubject: (t) => `Termin geändert: ${t}`,
     cancelledSubject: (t) => `Termin abgesagt: ${t}`,
+    removedSubject: (t) => `Aus Termin entfernt: ${t}`,
     intro: (a) =>
       a === 'created'
         ? 'Ein neuer Termin wurde Ihrem Kalender hinzugefügt.'
         : a === 'updated'
           ? 'Ein Termin in Ihrem Kalender wurde geändert.'
-          : 'Ein Termin in Ihrem Kalender wurde abgesagt.',
+          : a === 'removed'
+            ? 'Sie nehmen nicht mehr an diesem Termin teil. Er wurde aus Ihrem Kalender entfernt.'
+            : 'Ein Termin in Ihrem Kalender wurde abgesagt.',
     when: 'Datum',
     where: 'Ort',
     details: 'Beschreibung',
