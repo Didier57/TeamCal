@@ -2553,21 +2553,7 @@ label small,
     right: 0;
   }
 
-.context-menu {
-  position: fixed;
-  z-index: 80;
-  min-width: 160px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.menu-popover {
+  .menu-popover {
     min-width: 190px;
     max-width: calc(100vw - 20px);
   }
@@ -2817,6 +2803,20 @@ label small,
 
 .toolbar-menu {
   position: relative;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 80;
+  min-width: 160px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .menu-popover {
