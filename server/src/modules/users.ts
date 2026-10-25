@@ -80,14 +80,9 @@ export function userRoutes(): Router {
                    JOIN calendar_acl a ON a.calendar_id = c.id
                    WHERE c.owner_id = u.id AND a.user_id = ? AND a.can_view = 1
                  )
-              OR EXISTS (
-                   SELECT 1 FROM calendars c
-                   JOIN calendar_acl a ON a.calendar_id = c.id
-                   WHERE c.owner_id = ? AND a.user_id = u.id AND a.can_view = 1
-                 )
            ORDER BY u.first_name, u.last_name, u.username`
         )
-        .all(me.id, me.id, me.id) as UserRow[];
+        .all(me.id, me.id) as UserRow[];
       res.json(usersApi(rows, Boolean(me.is_admin)));
     })
   );

@@ -168,7 +168,7 @@ describe('TeamCal API', () => {
     expect(third.status).toBe(201);
   });
 
-  it('only lists users who share a calendar with the requester', async () => {
+  it('only lists users whose calendar the requester can view', async () => {
     const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
     const bobCreated = await admin
       .post('/api/users')
@@ -187,6 +187,9 @@ describe('TeamCal API', () => {
     const isolated = await bob.get('/api/users');
     expect(isolated.status).toBe(200);
     expect(isolated.body.map((item: any) => item.id)).toEqual([bobId]);
+
+    const bobCalendars = await bob.get('/api/calendars');
+    const bobCalendarId = bobCalendars.body.find((c: any) => c.ownerId === bobId).id as string;
 
     const isolatedAdmin = await admin.get('/api/users');
     const isolatedAdminIds = isolatedAdmin.body.map((item: any) => item.id);
@@ -217,8 +220,15 @@ describe('TeamCal API', () => {
 
     const adminList = await admin.get('/api/users');
     const adminIds = adminList.body.map((item: any) => item.id);
-    expect(adminIds).toContain(bobId);
+    expect(adminIds).not.toContain(bobId);
     expect(adminIds).not.toContain(maryseId);
+
+    await admin
+      .put(`/api/calendars/${bobCalendarId}/acl`)
+      .set('X-CSRF-Token', csrf)
+      .send({ entries: [{ userId: adminId, canView: true, canCreate: false, canEdit: false, canDelete: false }] });
+    const adminWithAccess = await admin.get('/api/users');
+    expect(adminWithAccess.body.map((item: any) => item.id)).toContain(bobId);
   });
 
   it('notifies a participant removed from an event', async () => {
