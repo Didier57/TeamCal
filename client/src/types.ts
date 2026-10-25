@@ -348,6 +348,7 @@ export interface CustomView {
   ownerId: string;
   ownerName: string;
   isShared: boolean;
+  isDefaultPersonal?: boolean;
   userIds: string[];
   createdAt: string;
 }

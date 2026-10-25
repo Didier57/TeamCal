@@ -9,6 +9,7 @@ import { isCountryCode } from '../lib/countries';
 import { SettingsStore, type AppSettings } from '../settings';
 import { syncHolidays } from '../lib/holidays';
 import { sendAccountEmail } from '../lib/mailer';
+import { createDefaultPersonalView, renameDefaultPersonalView } from '../lib/personal-view';
 
 const createSchema = z.object({
   username: z.string().trim().min(3).max(50),
@@ -126,6 +127,10 @@ export function userRoutes(): Router {
         req.db
           .prepare('INSERT INTO calendars (id, owner_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)')
           .run(newId(), id, body.username, color, now);
+        const personalViewId = createDefaultPersonalView(req.db, id, body.language);
+        req.db
+          .prepare('UPDATE users SET default_view = ? WHERE id = ?')
+          .run(`view:${personalViewId}`, id);
       })();
       const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(id) as UserRow;
       const settings = new SettingsStore(req.db).get();
@@ -195,6 +200,9 @@ export function userRoutes(): Router {
         );
       if (body.isActive === false) {
         req.db.prepare('DELETE FROM sessions WHERE user_id = ?').run(target.id);
+      }
+      if (body.language && body.language !== target.language) {
+        renameDefaultPersonalView(req.db, target.id, body.language);
       }
       if (body.country !== undefined && body.country !== target.country) {
         void syncHolidays(req.db, new SettingsStore(req.db).get(), target.id).catch(() => undefined);

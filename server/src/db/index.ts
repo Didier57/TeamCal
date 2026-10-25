@@ -235,6 +235,36 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
 `
+  },
+  {
+    id: 12,
+    sql: `
+ALTER TABLE custom_views ADD COLUMN is_default_personal INTEGER NOT NULL DEFAULT 0;
+`
+  },
+  {
+    id: 13,
+    sql: `
+INSERT INTO custom_views (id, name, owner_id, is_shared, is_default_personal, created_at, updated_at)
+SELECT 'personal-' || u.id,
+       CASE u.language
+         WHEN 'en' THEN 'My Planning'
+         WHEN 'de' THEN 'Meine Planung'
+         ELSE 'Mon Planning'
+       END,
+       u.id, 0, 1, datetime('now'), datetime('now')
+FROM users u
+WHERE NOT EXISTS (
+  SELECT 1 FROM custom_views v WHERE v.owner_id = u.id AND v.is_default_personal = 1
+);
+INSERT INTO custom_view_users (view_id, user_id)
+SELECT v.id, v.owner_id
+FROM custom_views v
+WHERE v.is_default_personal = 1
+  AND NOT EXISTS (
+    SELECT 1 FROM custom_view_users vu WHERE vu.view_id = v.id AND vu.user_id = v.owner_id
+  );
+`
   }
 ];
 

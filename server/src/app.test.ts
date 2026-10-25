@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
-import { openDatabase, type DB } from './db';
+import { openDatabase, runMigrations, type DB } from './db';
 import { createApp } from './app';
 import { SettingsStore } from './settings';
 
@@ -1380,6 +1380,60 @@ describe('TeamCal API', () => {
       .send({ defaultView: `view:${viewId}` });
     expect(shared.status).toBe(200);
     expect(shared.body.user.defaultView).toBe(`view:${viewId}`);
+  });
+
+  it('creates a translated default personal view for every user', async () => {
+    const { agent, csrf, userId } = await setupAdmin(app);
+    const adminViews = await agent.get('/api/views');
+    const adminPersonal = adminViews.body.find((view: any) => view.isDefaultPersonal);
+    expect(adminPersonal.name).toBe('Mon Planning');
+    expect(adminPersonal.ownerId).toBe(userId);
+    expect(adminPersonal.userIds).toEqual([userId]);
+    const adminMe = await agent.get('/api/auth/me');
+    expect(adminMe.body.user.defaultView).toBe(`view:${adminPersonal.id}`);
+
+    const created = await agent.post('/api/users').set('X-CSRF-Token', csrf).send({
+      username: 'erin',
+      email: 'erin@example.com',
+      firstName: 'Erin',
+      lastName: 'Example',
+      language: 'en'
+    });
+    expect(created.status).toBe(201);
+    const erinId = created.body.id as string;
+    expect(created.body.defaultView).toMatch(/^view:/);
+
+    let views = await agent.get('/api/views');
+    let erinPersonal = views.body.find(
+      (view: any) => view.ownerId === erinId && view.isDefaultPersonal
+    );
+    expect(erinPersonal.name).toBe('My Planning');
+
+    const renamed = await agent
+      .patch(`/api/users/${erinId}`)
+      .set('X-CSRF-Token', csrf)
+      .send({ language: 'de' });
+    expect(renamed.status).toBe(200);
+    views = await agent.get('/api/views');
+    erinPersonal = views.body.find(
+      (view: any) => view.ownerId === erinId && view.isDefaultPersonal
+    );
+    expect(erinPersonal.name).toBe('Meine Planung');
+
+    db.prepare('UPDATE users SET default_view = ? WHERE id = ?').run('week', erinId);
+    db.prepare('DELETE FROM custom_views WHERE owner_id = ? AND is_default_personal = 1').run(erinId);
+    db.prepare('DELETE FROM schema_migrations WHERE id = 13').run();
+    runMigrations(db);
+    views = await agent.get('/api/views');
+    erinPersonal = views.body.find(
+      (view: any) => view.ownerId === erinId && view.isDefaultPersonal
+    );
+    expect(erinPersonal.name).toBe('Meine Planung');
+    expect(
+      (db.prepare('SELECT default_view FROM users WHERE id = ?').get(erinId) as {
+        default_view: string;
+      }).default_view
+    ).toBe('week');
   });
 
   it('exposes the VAPID key and stores push subscriptions', async () => {

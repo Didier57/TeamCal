@@ -27,6 +27,7 @@ export function viewRoutes(): Router {
         ownerId: v.owner_id,
         ownerName: v.owner_name,
         isShared: Boolean(v.is_shared),
+        isDefaultPersonal: Boolean(v.is_default_personal),
         userIds,
         createdAt: v.created_at
       };

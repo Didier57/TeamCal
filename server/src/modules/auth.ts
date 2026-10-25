@@ -19,6 +19,7 @@ import { SettingsStore, type AppSettings } from '../settings';
 import { isValidTimeZone } from '../lib/time';
 import { isCountryCode } from '../lib/countries';
 import { syncHolidays } from '../lib/holidays';
+import { renameDefaultPersonalView } from '../lib/personal-view';
 import { sendAccountEmail } from '../lib/mailer';
 
 function appBaseUrl(req: { protocol: string; get(header: string): string | undefined }, settings: AppSettings) {
@@ -303,6 +304,9 @@ export function authRoutes(): Router {
           nowIso(),
           current.id
         );
+      if (body.language && body.language !== current.language) {
+        renameDefaultPersonalView(req.db, current.id, body.language);
+      }
       const user = req.db.prepare('SELECT * FROM users WHERE id = ?').get(current.id) as UserRow;
       if (body.country !== undefined && body.country !== current.country) {
         void syncHolidays(req.db, new SettingsStore(req.db).get(), current.id).catch(() => undefined);

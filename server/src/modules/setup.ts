@@ -6,6 +6,7 @@ import { audit } from '../lib/audit';
 import { asyncHandler, HttpError, newId, nowIso, randomToken } from '../lib/util';
 import { SettingsStore } from '../settings';
 import { isValidTimeZone } from '../lib/time';
+import { createDefaultPersonalView } from '../lib/personal-view';
 
 const setupSchema = z.object({
   appName: z.string().trim().min(1).max(80),
@@ -69,6 +70,10 @@ export function setupRoutes(): Router {
         req.db
           .prepare('INSERT INTO calendars (id, owner_id, name, color, created_at) VALUES (?, ?, ?, ?, ?)')
           .run(newId(), userId, `${body.admin.username}`, '#2f6feb', now);
+        const personalViewId = createDefaultPersonalView(req.db, userId, body.language);
+        req.db
+          .prepare('UPDATE users SET default_view = ? WHERE id = ?')
+          .run(`view:${personalViewId}`, userId);
         req.db
           .prepare('INSERT INTO categories (id, name, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
           .run(newId(), 'Général', '#2f6feb', now, now);
