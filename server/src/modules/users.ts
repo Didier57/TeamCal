@@ -50,13 +50,28 @@ export function userRoutes(): Router {
   router.get(
     '/',
     asyncHandler(async (req, res) => {
+      const me = req.user!;
+      const isAdmin = Boolean(me.is_admin);
       const rows = req.db
         .prepare(
-          `SELECT id, username, email, first_name, last_name, is_admin, is_active, language, timezone, country, default_view, last_login_at, created_at
-           FROM users ORDER BY first_name, last_name, username`
+          `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.is_admin, u.is_active,
+                  u.language, u.timezone, u.country, u.default_view, u.last_login_at, u.created_at
+           FROM users u
+           WHERE ? = 1
+              OR u.id = ?
+              OR EXISTS (
+                   SELECT 1 FROM calendars c
+                   JOIN calendar_acl a ON a.calendar_id = c.id
+                   WHERE c.owner_id = u.id AND a.user_id = ? AND a.can_view = 1
+                 )
+              OR EXISTS (
+                   SELECT 1 FROM calendars c
+                   JOIN calendar_acl a ON a.calendar_id = c.id
+                   WHERE c.owner_id = ? AND a.user_id = u.id AND a.can_view = 1
+                 )
+           ORDER BY u.first_name, u.last_name, u.username`
         )
-        .all() as UserRow[];
-      const isAdmin = Boolean(req.user!.is_admin);
+        .all(isAdmin ? 1 : 0, me.id, me.id, me.id) as UserRow[];
       res.json(
         rows.map((u) => ({
           id: u.id,

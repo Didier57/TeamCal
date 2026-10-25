@@ -168,6 +168,43 @@ describe('TeamCal API', () => {
     expect(third.status).toBe(201);
   });
 
+  it('only lists users who share a calendar with non-admins', async () => {
+    const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
+    const bobCreated = await admin
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({ username: 'bob', email: 'bob@example.com', password: 'Password123!' });
+    const bobId = bobCreated.body.id as string;
+    const maryseCreated = await admin
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({ username: 'maryse', email: 'maryse@example.com', password: 'Password123!' });
+    const maryseId = maryseCreated.body.id as string;
+
+    const bob = request.agent(app);
+    await bob.post('/api/auth/login').send({ username: 'bob', password: 'Password123!' });
+
+    const isolated = await bob.get('/api/users');
+    expect(isolated.status).toBe(200);
+    expect(isolated.body.map((item: any) => item.id)).toEqual([bobId]);
+
+    const adminCalendars = await admin.get('/api/calendars');
+    const adminCalendar = adminCalendars.body.find((c: any) => c.ownerId === adminId);
+    const acl = await admin
+      .put(`/api/calendars/${adminCalendar.id}/acl`)
+      .set('X-CSRF-Token', csrf)
+      .send({ entries: [{ userId: bobId, canView: true, canCreate: false, canEdit: false, canDelete: false }] });
+    expect(acl.status).toBe(200);
+
+    const shared = await bob.get('/api/users');
+    const sharedIds = shared.body.map((item: any) => item.id);
+    expect(sharedIds).toContain(adminId);
+    expect(sharedIds).not.toContain(maryseId);
+
+    const adminList = await admin.get('/api/users');
+    expect(adminList.body.map((item: any) => item.id)).toContain(maryseId);
+  });
+
   it('notifies a participant removed from an event', async () => {
     const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
     const createUser = async (username: string) => {
