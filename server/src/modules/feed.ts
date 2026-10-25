@@ -33,10 +33,10 @@ export function feedRoutes(): Router {
            FROM events e
            LEFT JOIN event_participants p ON p.event_id = e.id AND p.user_id = ?
            WHERE e.status <> 'cancelled'
-             AND (e.owner_id = ? OR e.created_by = ? OR p.user_id IS NOT NULL)
+             AND (e.owner_id = ? OR p.user_id IS NOT NULL)
            ORDER BY e.start_at`
         )
-        .all(user.id, user.id, user.id) as EventRow[];
+        .all(user.id, user.id) as EventRow[];
 
       const eventIds = events.map((event) => event.id);
       const exceptions: ExceptionRow[] =

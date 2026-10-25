@@ -1058,6 +1058,66 @@ describe('TeamCal API', () => {
     expect(text.match(/BEGIN:VEVENT/g)).toHaveLength(3);
   });
 
+  it('feeds only the events owned by or shared with the subscriber', async () => {
+    const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
+    const bobCreated = await admin
+      .post('/api/users')
+      .set('X-CSRF-Token', csrf)
+      .send({ username: 'bob', email: 'bob@example.com', password: 'Password123!' });
+    const bobId = bobCreated.body.id as string;
+    const bob = request.agent(app);
+    await bob.post('/api/auth/login').send({ username: 'bob', password: 'Password123!' });
+
+    const calendars = await admin.get('/api/calendars/all');
+    const adminCalendar = calendars.body.find((c: any) => c.ownerId === adminId);
+    const bobCalendar = calendars.body.find((c: any) => c.ownerId === bobId);
+
+    const acl = await admin
+      .put(`/api/calendars/${bobCalendar.id}/acl`)
+      .set('X-CSRF-Token', csrf)
+      .send({
+        entries: [
+          { userId: adminId, canView: true, canCreate: true, canEdit: true, canDelete: true }
+        ]
+      });
+    expect(acl.status).toBe(200);
+
+    const forBob = await admin
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: bobCalendar.id,
+        title: 'Bob planning',
+        start: '2026-05-04T09:00:00.000Z',
+        end: '2026-05-04T10:00:00.000Z'
+      });
+    expect(forBob.status).toBe(201);
+
+    const teamMeeting = await admin
+      .post('/api/events')
+      .set('X-CSRF-Token', csrf)
+      .send({
+        calendarId: adminCalendar.id,
+        title: 'Team meeting',
+        participantIds: [bobId],
+        start: '2026-05-05T09:00:00.000Z',
+        end: '2026-05-05T10:00:00.000Z'
+      });
+    expect(teamMeeting.status).toBe(201);
+
+    const adminMe = await admin.get('/api/auth/me');
+    const adminFeed = await admin.get(`/api/feed/${adminMe.body.user.feedToken}.ics`);
+    expect(adminFeed.status).toBe(200);
+    expect(adminFeed.text).toContain('SUMMARY:Team meeting');
+    expect(adminFeed.text).not.toContain('SUMMARY:Bob planning');
+
+    const bobMe = await bob.get('/api/auth/me');
+    const bobFeed = await bob.get(`/api/feed/${bobMe.body.user.feedToken}.ics`);
+    expect(bobFeed.status).toBe(200);
+    expect(bobFeed.text).toContain('SUMMARY:Team meeting');
+    expect(bobFeed.text).toContain('SUMMARY:Bob planning');
+  });
+
   it('keeps original UIDs and RDATE entries through import and export', async () => {
     const { agent, csrf, userId } = await setupAdmin(app);
     const content = [
