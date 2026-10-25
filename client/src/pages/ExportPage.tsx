@@ -13,7 +13,7 @@ export function ExportPage() {
 
   useEffect(() => {
     if (!user?.isAdmin) return;
-    apiGet<User[]>('/users')
+    apiGet<User[]>('/users/all')
       .then((list) => {
         setUsers(list);
         setTarget((current) => current || user.id);

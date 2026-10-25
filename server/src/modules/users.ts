@@ -47,18 +47,34 @@ export function userRoutes(): Router {
   const router = Router();
   router.use(requireAuth);
 
+  const selectUsers = `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.is_admin, u.is_active,
+                  u.language, u.timezone, u.country, u.default_view, u.last_login_at, u.created_at
+           FROM users u`;
+
+  function usersApi(rows: UserRow[], withPrivate: boolean) {
+    return rows.map((u) => ({
+      id: u.id,
+      username: u.username,
+      firstName: u.first_name,
+      lastName: u.last_name,
+      isAdmin: Boolean(u.is_admin),
+      isActive: Boolean(u.is_active),
+      language: u.language,
+      timezone: u.timezone,
+      country: u.country,
+      defaultView: u.default_view,
+      ...(withPrivate ? { email: u.email, lastLoginAt: u.last_login_at, createdAt: u.created_at } : {})
+    }));
+  }
+
   router.get(
     '/',
     asyncHandler(async (req, res) => {
       const me = req.user!;
-      const isAdmin = Boolean(me.is_admin);
       const rows = req.db
         .prepare(
-          `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.is_admin, u.is_active,
-                  u.language, u.timezone, u.country, u.default_view, u.last_login_at, u.created_at
-           FROM users u
-           WHERE ? = 1
-              OR u.id = ?
+          `${selectUsers}
+           WHERE u.id = ?
               OR EXISTS (
                    SELECT 1 FROM calendars c
                    JOIN calendar_acl a ON a.calendar_id = c.id
@@ -71,24 +87,19 @@ export function userRoutes(): Router {
                  )
            ORDER BY u.first_name, u.last_name, u.username`
         )
-        .all(isAdmin ? 1 : 0, me.id, me.id, me.id) as UserRow[];
-      res.json(
-        rows.map((u) => ({
-          id: u.id,
-          username: u.username,
-          firstName: u.first_name,
-          lastName: u.last_name,
-          isAdmin: Boolean(u.is_admin),
-          isActive: Boolean(u.is_active),
-          language: u.language,
-          timezone: u.timezone,
-          country: u.country,
-          defaultView: u.default_view,
-          ...(isAdmin
-            ? { email: u.email, lastLoginAt: u.last_login_at, createdAt: u.created_at }
-            : {})
-        }))
-      );
+        .all(me.id, me.id, me.id) as UserRow[];
+      res.json(usersApi(rows, Boolean(me.is_admin)));
+    })
+  );
+
+  router.get(
+    '/all',
+    requireAdmin,
+    asyncHandler(async (_req, res) => {
+      const rows = _req.db
+        .prepare(`${selectUsers} ORDER BY u.first_name, u.last_name, u.username`)
+        .all() as UserRow[];
+      res.json(usersApi(rows, true));
     })
   );
 

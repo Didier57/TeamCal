@@ -18,7 +18,7 @@ export function ReportAuditPage() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([apiGet<AuditReportResponse>('/reports/audit'), apiGet<User[]>('/users')])
+    Promise.all([apiGet<AuditReportResponse>('/reports/audit'), apiGet<User[]>('/users/all')])
       .then(([report, userList]) => {
         if (!active) return;
         setEntries(report.entries);

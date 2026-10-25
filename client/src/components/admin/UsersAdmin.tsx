@@ -87,7 +87,7 @@ export function UsersAdmin() {
   const [busy, setBusy] = useState(false);
 
   async function load() {
-    const list = await apiGet<User[]>('/users');
+    const list = await apiGet<User[]>('/users/all');
     setUsers(list);
   }
 

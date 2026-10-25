@@ -168,7 +168,7 @@ describe('TeamCal API', () => {
     expect(third.status).toBe(201);
   });
 
-  it('only lists users who share a calendar with non-admins', async () => {
+  it('only lists users who share a calendar with the requester', async () => {
     const { agent: admin, csrf, userId: adminId } = await setupAdmin(app);
     const bobCreated = await admin
       .post('/api/users')
@@ -188,6 +188,20 @@ describe('TeamCal API', () => {
     expect(isolated.status).toBe(200);
     expect(isolated.body.map((item: any) => item.id)).toEqual([bobId]);
 
+    const isolatedAdmin = await admin.get('/api/users');
+    const isolatedAdminIds = isolatedAdmin.body.map((item: any) => item.id);
+    expect(isolatedAdminIds).toContain(adminId);
+    expect(isolatedAdminIds).not.toContain(maryseId);
+    expect(isolatedAdminIds).not.toContain(bobId);
+
+    const allAsBob = await bob.get('/api/users/all');
+    expect(allAsBob.status).toBe(403);
+    const allAsAdmin = await admin.get('/api/users/all');
+    expect(allAsAdmin.status).toBe(200);
+    expect(allAsAdmin.body.map((item: any) => item.id)).toEqual(
+      expect.arrayContaining([adminId, bobId, maryseId])
+    );
+
     const adminCalendars = await admin.get('/api/calendars');
     const adminCalendar = adminCalendars.body.find((c: any) => c.ownerId === adminId);
     const acl = await admin
@@ -202,7 +216,9 @@ describe('TeamCal API', () => {
     expect(sharedIds).not.toContain(maryseId);
 
     const adminList = await admin.get('/api/users');
-    expect(adminList.body.map((item: any) => item.id)).toContain(maryseId);
+    const adminIds = adminList.body.map((item: any) => item.id);
+    expect(adminIds).toContain(bobId);
+    expect(adminIds).not.toContain(maryseId);
   });
 
   it('notifies a participant removed from an event', async () => {
@@ -1444,7 +1460,7 @@ describe('TeamCal API', () => {
       .send({ username: 'bob', password: 'Password123!' });
     const bobCsrf = bobLogin.body.csrfToken as string;
 
-    const listed = await agent.get('/api/users');
+    const listed = await agent.get('/api/users/all');
     expect(listed.body.find((item: any) => item.username === 'bob').lastLoginAt).toBeTruthy();
 
     const forbidden = await bob

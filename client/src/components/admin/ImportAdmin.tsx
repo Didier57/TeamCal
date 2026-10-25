@@ -21,7 +21,7 @@ export function ImportAdmin({ selfOnly = false }: { selfOnly?: boolean }) {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    const usersRequest = selfOnly ? Promise.resolve<User[]>([]) : apiGet<User[]>('/users');
+    const usersRequest = selfOnly ? Promise.resolve<User[]>([]) : apiGet<User[]>('/users/all');
     Promise.all([usersRequest, apiGet<Category[]>('/categories')])
       .then(([loadedUsers, loadedCategories]) => {
         setUsers(loadedUsers);
