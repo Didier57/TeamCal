@@ -249,12 +249,11 @@ async function deliverEventMails(
         subject,
         html,
         text: `${event.title}\n${texts.intro(action)}\n${texts.when}: ${when}`,
-        alternatives: [
-          {
-            content: ics,
-            contentType: `text/calendar; charset=utf-8; method=${method}`
-          }
-        ]
+        icalEvent: {
+          method,
+          filename: 'invitation.ics',
+          content: ics
+        }
       });
       db.prepare(
         'INSERT INTO email_log (id, recipient, subject, status, error, event_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
