@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, type DragEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import 'flag-icons/css/flag-icons.min.css';
 import { countryLabel } from '../countries';
 import { useI18n } from '../i18n';
@@ -14,6 +14,7 @@ interface Props {
   timeZone: string;
   onCreate: (calendarId: string, start: Date, end: Date, allDay: boolean) => void;
   onEdit: (occurrence: Occurrence) => void;
+  onDelete: (occurrence: Occurrence) => void;
   onMove: (
     occurrence: Occurrence,
     targetKey: string,
@@ -108,11 +109,82 @@ export function PlanningGrid({
   timeZone,
   onCreate,
   onEdit,
+  onDelete,
   onMove
 }: Props) {
   const { t, locale } = useI18n();
   const isMobile = useMediaQuery('(max-width: 900px)');
   const dragged = useRef<Occurrence | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    occurrence: Occurrence;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('mousedown', close);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      window.removeEventListener('mousedown', close);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
+  }, [contextMenu]);
+
+  function openContextMenu(event: ReactMouseEvent, occurrence: Occurrence) {
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({
+      x: Math.min(event.clientX, window.innerWidth - 180),
+      y: Math.min(event.clientY, window.innerHeight - 100),
+      occurrence
+    });
+  }
+
+  function renderContextMenu() {
+    if (!contextMenu) return null;
+    const occurrence = contextMenu.occurrence;
+    const run = (action: () => void) => {
+      setContextMenu(null);
+      action();
+    };
+    return (
+      <div
+        className="context-menu"
+        style={{ left: contextMenu.x, top: contextMenu.y }}
+        role="menu"
+        onMouseDown={(event) => event.stopPropagation()}
+        onContextMenu={(event) => event.preventDefault()}
+      >
+        <button
+          type="button"
+          role="menuitem"
+          className="menu-item"
+          onClick={() => run(() => onEdit(occurrence))}
+        >
+          {t('common.edit')}
+        </button>
+        {occurrence.deletable && (
+          <button
+            type="button"
+            role="menuitem"
+            className="menu-item"
+            onClick={() => run(() => onDelete(occurrence))}
+          >
+            {t('common.delete')}
+          </button>
+        )}
+      </div>
+    );
+  }
 
   const anchorKey = localDateKey(date);
   const todayKey = dateKeyOf(new Date(), timeZone);
@@ -284,6 +356,7 @@ export function PlanningGrid({
           event.stopPropagation();
           onEdit(occurrence);
         }}
+        onContextMenu={(event) => openContextMenu(event, occurrence)}
         title={hoverTitle(occurrence, description)}
       >
         {!occurrence.allDay && <span className="planning-event-time">{timeLabel(occurrence)}</span>}
@@ -319,6 +392,7 @@ export function PlanningGrid({
           event.stopPropagation();
           onEdit(occurrence);
         }}
+        onContextMenu={(event) => openContextMenu(event, occurrence)}
         title={`${owner ? `${owner} · ` : ''}${time ? `${time} · ` : ''}${hoverTitle(
           occurrence,
           description
@@ -407,6 +481,7 @@ export function PlanningGrid({
                           background: `color-mix(in srgb, ${color} 11%, var(--color-surface))`
                         }}
                         onClick={() => onEdit(occurrence)}
+                        onContextMenu={(event) => openContextMenu(event, occurrence)}
                         title={hoverTitle(occurrence, description)}
                       >
                         <span className="mobile-event-time">{timeLabel(occurrence)}</span>
@@ -422,6 +497,7 @@ export function PlanningGrid({
             </section>
           );
         })}
+        {renderContextMenu()}
       </div>
     );
   }
@@ -608,6 +684,7 @@ export function PlanningGrid({
             ))}
           </div>
         ))}
+        {renderContextMenu()}
       </div>
     </div>
   );

@@ -152,6 +152,8 @@ const fr: Record<string, string> = {
   'calendar.deleteOccurrenceQuestion': 'Cet événement est récurrent. Que souhaitez-vous supprimer ?',
   'calendar.changeHoursQuestion':
     'Voulez-vous modifier les heures de cet événement ?\n\nOui : ouvrir l’événement pour ajuster l’heure.\nNon : déplacer en conservant l’heure actuelle.',
+  'calendar.deleteScopeQuestion':
+    'Supprimer toute la série ?\n\nOK : toute la série.\nAnnuler : uniquement cette occurrence.',
   'calendar.editOccurrence': 'Cette occurrence',
   'calendar.editSeries': 'Toute la série',
   'calendar.deleteOccurrence': 'Cette occurrence',
@@ -716,6 +718,8 @@ const en: Record<string, string> = {
   'calendar.deleteOccurrenceQuestion': 'This event is recurring. What do you want to delete?',
   'calendar.changeHoursQuestion':
     'Do you want to change the time of this event?\n\nYes: open the event to adjust the time.\nNo: move it and keep the current time.',
+  'calendar.deleteScopeQuestion':
+    'Delete the whole series?\n\nOK: the whole series.\nCancel: only this occurrence.',
   'calendar.editOccurrence': 'This occurrence',
   'calendar.editSeries': 'The whole series',
   'calendar.deleteOccurrence': 'This occurrence',
@@ -1279,6 +1283,8 @@ const de: Record<string, string> = {
   'calendar.deleteOccurrenceQuestion': 'Dieser Termin wiederholt sich. Was möchten Sie löschen?',
   'calendar.changeHoursQuestion':
     'Möchten Sie die Uhrzeit dieses Termins ändern?\n\nJa: Termin öffnen und Uhrzeit anpassen.\nNein: verschieben und die aktuelle Uhrzeit beibehalten.',
+  'calendar.deleteScopeQuestion':
+    'Die gesamte Serie löschen?\n\nOK: die gesamte Serie.\nAbbrechen: nur dieses Vorkommen.',
   'calendar.editOccurrence': 'Dieses Vorkommen',
   'calendar.editSeries': 'Die gesamte Serie',
   'calendar.deleteOccurrence': 'Dieses Vorkommen',

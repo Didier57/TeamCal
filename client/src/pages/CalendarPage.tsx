@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PlanningGrid } from '../components/PlanningGrid';
-import { apiGet, apiPatch, apiPut, ApiError } from '../api';
+import { apiDelete, apiGet, apiPatch, apiPut, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { useI18n } from '../i18n';
 import { addDaysToDateKey, formatDate, toDateInput, toDateTimeInput, wallTimeToUtc } from '../format';
@@ -539,6 +539,27 @@ export function CalendarPage() {
     }
   }
 
+  async function handleDelete(occurrence: Occurrence) {
+    if (!window.confirm(t('calendar.deleteConfirm'))) return;
+    const wholeSeries = !occurrence.recurring || window.confirm(t('calendar.deleteScopeQuestion'));
+    try {
+      if (!wholeSeries) {
+        await apiDelete(
+          `/events/${occurrence.eventId}?scope=occurrence&occurrenceStart=${encodeURIComponent(
+            occurrence.occurrenceStart
+          )}`
+        );
+      } else {
+        await apiDelete(`/events/${occurrence.eventId}`);
+      }
+      if (dialog?.occurrence?.eventId === occurrence.eventId) setDialog(null);
+      showFlash(t('calendar.eventDeleted'));
+      await loadEvents();
+    } catch (err) {
+      showFlash(err instanceof ApiError ? errorMessage(err.code) : t('common.error'));
+    }
+  }
+
   async function applyBrowserTimeZone() {
     try {
       await apiPut('/auth/me/preferences', { timezone: browserTimeZone });
@@ -653,6 +674,7 @@ export function CalendarPage() {
             timeZone={timeZone}
             onCreate={(calendarId, start, end, allDay) => openCreate(calendarId, start, end, allDay)}
             onEdit={openEdit}
+            onDelete={(occurrence) => void handleDelete(occurrence)}
             onMove={(occurrence, targetKey, targetHour, targetCalendarId) =>
               void handleMove(occurrence, targetKey, targetHour, targetCalendarId)
             }
