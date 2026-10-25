@@ -123,8 +123,12 @@ async function deliver(
     return { sent: true, statusCode: null };
   } catch (error) {
     const statusCode = (error as { statusCode?: number }).statusCode ?? null;
-    if (statusCode === 404 || statusCode === 410) {
+    if (statusCode === 401 || statusCode === 403 || statusCode === 404 || statusCode === 410) {
       db.prepare('DELETE FROM push_subscriptions WHERE id = ?').run(subscription.id);
+      logger.warn('push_subscription_removed', {
+        endpoint: subscription.endpoint.slice(0, 60),
+        statusCode
+      });
     } else {
       logger.error('push_send_failed', {
         endpoint: subscription.endpoint.slice(0, 60),

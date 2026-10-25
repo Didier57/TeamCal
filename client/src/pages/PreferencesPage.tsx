@@ -24,6 +24,14 @@ const timezoneChoices = timezones.includes(browserTimeZone)
   ? timezones
   : [browserTimeZone, ...timezones];
 
+const PUSH_KEY_STORAGE = 'teamcal.pushKey';
+
+function pushErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) return err.code;
+  if (err instanceof Error && err.message) return err.message;
+  return 'unknown';
+}
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -38,10 +46,10 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 async function serviceWorkerRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null;
   const existing = await navigator.serviceWorker.getRegistration();
-  if (existing) return existing;
+  if (existing?.active) return existing;
   return Promise.race([
     navigator.serviceWorker.ready,
-    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 5000))
+    new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 15000))
   ]);
 }
 
@@ -126,7 +134,9 @@ export function PreferencesPage() {
       typeof Notification !== 'undefined' &&
       Notification.permission === 'granted'
     ) {
-      void ensurePushSubscription().catch(() => undefined);
+      void ensurePushSubscription().catch((err) => {
+        setPushError(`${t('prefs.pushFailed')} (${pushErrorMessage(err)})`);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.notifyNewEvents, settings?.vapidPublicKey]);
@@ -176,8 +186,13 @@ export function PreferencesPage() {
     }
     if (!settings?.vapidPublicKey) throw new Error('push_unavailable');
     const registration = await serviceWorkerRegistration();
-    if (!registration) throw new Error('service_worker_unavailable');
+    if (!registration?.active) throw new Error('service_worker_unavailable');
     let subscription = await registration.pushManager.getSubscription();
+    const storedKey = window.localStorage.getItem(PUSH_KEY_STORAGE);
+    if (subscription && storedKey && storedKey !== settings.vapidPublicKey) {
+      await subscription.unsubscribe();
+      subscription = null;
+    }
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
@@ -188,6 +203,7 @@ export function PreferencesPage() {
     await apiPost('/push/subscribe', {
       subscription: { endpoint: subscription.endpoint, keys: json.keys }
     });
+    window.localStorage.setItem(PUSH_KEY_STORAGE, settings.vapidPublicKey);
   }
 
   async function removePushSubscription() {
@@ -198,6 +214,7 @@ export function PreferencesPage() {
     if (!subscription) return;
     await apiPost('/push/unsubscribe', { endpoint: subscription.endpoint }).catch(() => undefined);
     await subscription.unsubscribe().catch(() => undefined);
+    window.localStorage.removeItem(PUSH_KEY_STORAGE);
   }
 
   async function toggleNotifications(checked: boolean) {
@@ -233,7 +250,7 @@ export function PreferencesPage() {
       setUser(response.user);
       await ensurePushSubscription();
     } catch (err) {
-      setPushError(err instanceof ApiError ? errorMessage(err.code) : t('prefs.pushFailed'));
+      setPushError(`${t('prefs.pushFailed')} (${pushErrorMessage(err)})`);
     }
   }
 
@@ -241,9 +258,18 @@ export function PreferencesPage() {
     setPushError(null);
     setPushTest(null);
     try {
-      const result = await apiPost<{ subscriptions: number; sent: number; failed: number }>(
+      let result = await apiPost<{ subscriptions: number; sent: number; failed: number }>(
         '/push/test'
       );
+      if (result.subscriptions === 0) {
+        try {
+          await ensurePushSubscription();
+        } catch (err) {
+          setPushError(`${t('prefs.pushNoSubscription')} (${pushErrorMessage(err)})`);
+          return;
+        }
+        result = await apiPost<{ subscriptions: number; sent: number; failed: number }>('/push/test');
+      }
       if (result.subscriptions === 0) setPushError(t('prefs.pushNoSubscription'));
       else if (result.sent > 0) setPushTest(t('prefs.pushTestSent'));
       else setPushError(t('prefs.pushTestFailed'));
