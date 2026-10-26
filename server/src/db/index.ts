@@ -265,6 +265,12 @@ WHERE v.is_default_personal = 1
     SELECT 1 FROM custom_view_users vu WHERE vu.view_id = v.id AND vu.user_id = v.owner_id
   );
 `
+  },
+  {
+    id: 14,
+    sql: `
+ALTER TABLE users ADD COLUMN last_seen_at TEXT;
+`
   }
 ];
 

@@ -204,6 +204,9 @@ describe('TeamCal API', () => {
     expect(allAsAdmin.body.map((item: any) => item.id)).toEqual(
       expect.arrayContaining([adminId, bobId, maryseId])
     );
+    expect(
+      allAsAdmin.body.find((item: any) => item.id === bobId).lastSeenAt
+    ).toBeTruthy();
 
     const adminCalendars = await admin.get('/api/calendars');
     const adminCalendarOwners = adminCalendars.body.map((c: any) => c.ownerId);

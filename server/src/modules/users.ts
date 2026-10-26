@@ -48,7 +48,7 @@ export function userRoutes(): Router {
   router.use(requireAuth);
 
   const selectUsers = `SELECT u.id, u.username, u.email, u.first_name, u.last_name, u.is_admin, u.is_active,
-                  u.language, u.timezone, u.country, u.default_view, u.last_login_at, u.created_at
+                  u.language, u.timezone, u.country, u.default_view, u.last_login_at, u.last_seen_at, u.created_at
            FROM users u`;
 
   function usersApi(rows: UserRow[], withPrivate: boolean) {
@@ -63,7 +63,14 @@ export function userRoutes(): Router {
       timezone: u.timezone,
       country: u.country,
       defaultView: u.default_view,
-      ...(withPrivate ? { email: u.email, lastLoginAt: u.last_login_at, createdAt: u.created_at } : {})
+      ...(withPrivate
+        ? {
+            email: u.email,
+            lastLoginAt: u.last_login_at,
+            lastSeenAt: u.last_seen_at,
+            createdAt: u.created_at
+          }
+        : {})
     }));
   }
 

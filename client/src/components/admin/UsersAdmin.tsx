@@ -95,6 +95,29 @@ export function UsersAdmin() {
     void load().catch(() => setError(t('common.error')));
   }, [t]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void load().catch(() => undefined);
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  function lastSeenLabel(user: User) {
+    if (!user.lastSeenAt) return <>—</>;
+    const seen = new Date(user.lastSeenAt);
+    if (Date.now() - seen.getTime() < 5 * 60 * 1000) {
+      return <span className="pill success">{t('admin.online')}</span>;
+    }
+    return (
+      <span title={seen.toISOString()}>
+        {new Intl.DateTimeFormat(undefined, {
+          dateStyle: 'short',
+          timeStyle: 'short'
+        }).format(seen)}
+      </span>
+    );
+  }
+
   function startCreate() {
     setForm({ ...empty });
     setError(null);
@@ -218,6 +241,7 @@ export function UsersAdmin() {
               <th>{t('common.admin')}</th>
               <th>{t('common.active')}</th>
               <th>{t('admin.lastLogin')}</th>
+              <th>{t('admin.lastSeen')}</th>
               <th>{t('common.actions')}</th>
             </tr>
           </thead>
@@ -245,6 +269,7 @@ export function UsersAdmin() {
                       }).format(new Date(user.lastLoginAt))
                     : '—'}
                 </td>
+                <td>{lastSeenLabel(user)}</td>
                 <td className="row-actions">
                   <button
                     type="button"

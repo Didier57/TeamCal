@@ -24,6 +24,7 @@ export interface UserRow {
   country: string | null;
   notify_new_events: number;
   last_login_at: string | null;
+  last_seen_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -167,6 +168,12 @@ export function sessionMiddleware(req: Request, _res: Response, next: NextFuncti
           const seen = nowIso();
           req.db.prepare('UPDATE sessions SET last_seen_at = ? WHERE id = ?').run(seen, session.id);
           session.last_seen_at = seen;
+        }
+        const lastActive = user.last_seen_at ? new Date(user.last_seen_at).getTime() : 0;
+        if (Date.now() - lastActive > 60000) {
+          const seen = nowIso();
+          req.db.prepare('UPDATE users SET last_seen_at = ? WHERE id = ?').run(seen, user.id);
+          user.last_seen_at = seen;
         }
       } else if (session) {
         req.db.prepare('DELETE FROM sessions WHERE id = ?').run(session.id);

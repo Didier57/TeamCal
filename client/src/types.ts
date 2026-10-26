@@ -21,6 +21,7 @@ export interface User {
   country?: string | null;
   notifyNewEvents?: boolean;
   lastLoginAt?: string | null;
+  lastSeenAt?: string | null;
   createdAt?: string;
 }
 
