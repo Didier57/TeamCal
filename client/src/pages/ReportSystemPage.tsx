@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
+import { currentMonth, MonthNavigator, monthRange } from '../components/MonthNavigator';
 import { formatDate } from '../format';
 import { useI18n } from '../i18n';
 import type { SettingChange, SystemReportEntry, SystemReportResponse } from '../types';
@@ -78,14 +79,21 @@ export function ReportSystemPage() {
   const { t, locale, errorMessage } = useI18n();
   const timeZone = useEffectiveTimeZone();
   const [entries, setEntries] = useState<SystemReportEntry[]>([]);
+  const [month, setMonth] = useState(currentMonth);
+  const [day, setDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    apiGet<SystemReportResponse>('/reports/system')
+    const { from, to } = monthRange(month, day);
+    apiGet<SystemReportResponse>(
+      `/reports/system?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=2000`
+    )
       .then((report) => {
-        if (active) setEntries(report.entries);
+        if (!active) return;
+        setEntries(report.entries);
+        setError(null);
       })
       .catch((err) => {
         if (active) setError(errorMessage(err instanceof ApiError ? err.code : 'common.error'));
@@ -96,7 +104,7 @@ export function ReportSystemPage() {
     return () => {
       active = false;
     };
-  }, [errorMessage]);
+  }, [month, day, errorMessage]);
 
   function dateLabel(entry: SystemReportEntry): string {
     return formatDate(entry.createdAt, {
@@ -208,6 +216,14 @@ export function ReportSystemPage() {
       </div>
       <section className="panel">
         <p className="muted report-hint">{t('reports.systemHint')}</p>
+        <MonthNavigator
+          month={month}
+          day={day}
+          onChange={(nextMonth, nextDay) => {
+            setMonth(nextMonth);
+            setDay(nextDay);
+          }}
+        />
         {loading && <p className="muted">{t('common.loading')}</p>}
         {error && <div className="form-error">{error}</div>}
         {!loading && !error && entries.length === 0 && (

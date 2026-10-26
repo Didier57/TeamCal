@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiGet, ApiError } from '../api';
 import { useAuth, useEffectiveTimeZone } from '../app-context';
 import { AuditEventDialog } from '../components/AuditEventDialog';
+import { currentMonth, MonthNavigator, monthRange } from '../components/MonthNavigator';
 import { formatDate } from '../format';
 import { useI18n } from '../i18n';
 import type { AuditReportEntry, AuditReportResponse, User } from '../types';
@@ -13,16 +14,33 @@ export function ReportAuditPage() {
   const [entries, setEntries] = useState<AuditReportEntry[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [selected, setSelected] = useState<AuditReportEntry | null>(null);
+  const [month, setMonth] = useState(currentMonth);
+  const [day, setDay] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    Promise.all([apiGet<AuditReportResponse>('/reports/audit'), apiGet<User[]>('/users/all')])
-      .then(([report, userList]) => {
+    apiGet<User[]>('/users/all')
+      .then((userList) => {
+        if (active) setUsers(userList);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const { from, to } = monthRange(month, day);
+    apiGet<AuditReportResponse>(
+      `/reports/audit?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=2000`
+    )
+      .then((report) => {
         if (!active) return;
         setEntries(report.entries);
-        setUsers(userList);
+        setError(null);
       })
       .catch((err) => {
         if (active) setError(errorMessage(err instanceof ApiError ? err.code : 'common.error'));
@@ -33,7 +51,7 @@ export function ReportAuditPage() {
     return () => {
       active = false;
     };
-  }, [errorMessage]);
+  }, [month, day, errorMessage]);
 
   function dateLabel(entry: AuditReportEntry): string {
     return formatDate(entry.createdAt, {
@@ -52,6 +70,14 @@ export function ReportAuditPage() {
       </div>
       <section className="panel">
         <p className="muted report-hint">{t('reports.hint')}</p>
+        <MonthNavigator
+          month={month}
+          day={day}
+          onChange={(nextMonth, nextDay) => {
+            setMonth(nextMonth);
+            setDay(nextDay);
+          }}
+        />
         {loading && <p className="muted">{t('common.loading')}</p>}
         {error && <div className="form-error">{error}</div>}
         {!loading && !error && entries.length === 0 && (

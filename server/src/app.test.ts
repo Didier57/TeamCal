@@ -1366,6 +1366,24 @@ describe('TeamCal API', () => {
     expect(failedRow.ip).toBeTruthy();
     expect(failedRow.details.username).toBe('loguser');
 
+    const past = new Date(Date.now() - 60 * 86400000).toISOString();
+    const future = new Date(Date.now() + 60 * 86400000).toISOString();
+    const windowed = await agent.get(
+      `/api/reports/system?from=${encodeURIComponent(past)}&to=${encodeURIComponent(future)}`
+    );
+    expect(windowed.status).toBe(200);
+    expect(windowed.body.entries.map((entry: any) => entry.action)).toContain('user.created');
+
+    const emptyWindow = await agent.get(
+      `/api/reports/system?from=${encodeURIComponent(future)}`
+    );
+    expect(emptyWindow.status).toBe(200);
+    expect(emptyWindow.body.entries).toHaveLength(0);
+
+    const invalidRange = await agent.get('/api/reports/system?from=not-a-date');
+    expect(invalidRange.status).toBe(400);
+    expect(invalidRange.body.error).toBe('invalid_range');
+
     const userAgent = request.agent(app);
     const login = await userAgent
       .post('/api/auth/login')

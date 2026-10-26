@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { requireAdmin, requireAuth } from '../lib/auth';
-import { asyncHandler } from '../lib/util';
+import { asyncHandler, HttpError } from '../lib/util';
 
 const EVENT_ACTIONS = ['event.created', 'event.updated', 'event.deleted'] as const;
 const SYSTEM_ACTIONS = [
@@ -22,8 +22,40 @@ const SYSTEM_ACTIONS = [
   'events.imported'
 ] as const;
 const DEFAULT_LIMIT = 200;
-const MAX_LIMIT = 500;
+const MAX_LIMIT = 2000;
 const SENSITIVE_KEY = /password|secret|token|hash/i;
+
+interface DateRange {
+  clause: string;
+  params: string[];
+}
+
+function dateRange(query: Record<string, unknown>): DateRange {
+  const rawFrom = typeof query.from === 'string' ? query.from : '';
+  const rawTo = typeof query.to === 'string' ? query.to : '';
+  const clauses: string[] = [];
+  const params: string[] = [];
+  if (rawFrom) {
+    const from = new Date(rawFrom);
+    if (Number.isNaN(from.getTime())) throw new HttpError(400, 'invalid_range');
+    clauses.push('a.created_at >= ?');
+    params.push(from.toISOString());
+  }
+  if (rawTo) {
+    const to = new Date(rawTo);
+    if (Number.isNaN(to.getTime())) throw new HttpError(400, 'invalid_range');
+    clauses.push('a.created_at < ?');
+    params.push(to.toISOString());
+  }
+  return { clause: clauses.length > 0 ? ` AND ${clauses.join(' AND ')}` : '', params };
+}
+
+function limitParam(value: unknown): number {
+  const requested = Number(value ?? DEFAULT_LIMIT);
+  return Number.isFinite(requested)
+    ? Math.min(Math.max(Math.trunc(requested), 1), MAX_LIMIT)
+    : DEFAULT_LIMIT;
+}
 
 interface AuditRow {
   id: string;
@@ -181,10 +213,8 @@ export function reportRoutes(): Router {
   router.get(
     '/audit',
     asyncHandler(async (req, res) => {
-      const requested = Number(req.query.limit ?? DEFAULT_LIMIT);
-      const limit = Number.isFinite(requested)
-        ? Math.min(Math.max(Math.trunc(requested), 1), MAX_LIMIT)
-        : DEFAULT_LIMIT;
+      const limit = limitParam(req.query.limit);
+      const range = dateRange(req.query as Record<string, unknown>);
 
       const rows = req.db
         .prepare(
@@ -201,11 +231,11 @@ export function reportRoutes(): Router {
            LEFT JOIN events e ON e.id = a.entity_id
            LEFT JOIN calendars c ON c.id = e.calendar_id
            LEFT JOIN users o ON o.id = c.owner_id
-           WHERE a.action IN (${EVENT_ACTIONS.map(() => '?').join(',')})
+           WHERE a.action IN (${EVENT_ACTIONS.map(() => '?').join(',')})${range.clause}
            ORDER BY a.created_at DESC, a.rowid DESC
            LIMIT ?`
         )
-        .all(...EVENT_ACTIONS, limit) as AuditRow[];
+        .all(...EVENT_ACTIONS, ...range.params, limit) as AuditRow[];
 
       const detailsById = new Map<string, Record<string, unknown>>();
       const fallbackCalendarIds = new Set<string>();
@@ -288,10 +318,8 @@ export function reportRoutes(): Router {
   router.get(
     '/system',
     asyncHandler(async (req, res) => {
-      const requested = Number(req.query.limit ?? DEFAULT_LIMIT);
-      const limit = Number.isFinite(requested)
-        ? Math.min(Math.max(Math.trunc(requested), 1), MAX_LIMIT)
-        : DEFAULT_LIMIT;
+      const limit = limitParam(req.query.limit);
+      const range = dateRange(req.query as Record<string, unknown>);
 
       const rows = req.db
         .prepare(
@@ -300,11 +328,11 @@ export function reportRoutes(): Router {
                   u.first_name AS actor_first_name, u.last_name AS actor_last_name
            FROM audit_log a
            LEFT JOIN users u ON u.id = a.user_id
-           WHERE a.action IN (${SYSTEM_ACTIONS.map(() => '?').join(',')})
+           WHERE a.action IN (${SYSTEM_ACTIONS.map(() => '?').join(',')})${range.clause}
            ORDER BY a.created_at DESC, a.rowid DESC
            LIMIT ?`
         )
-        .all(...SYSTEM_ACTIONS, limit) as SystemAuditRow[];
+        .all(...SYSTEM_ACTIONS, ...range.params, limit) as SystemAuditRow[];
 
       const users = req.db
         .prepare('SELECT id, username, first_name, last_name FROM users')
