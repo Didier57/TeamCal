@@ -461,7 +461,6 @@ export function eventRoutes(): Router {
       if (calendarIds) rows = rows.filter((e) => calendarIds.includes(e.calendar_id));
       if (userIds) rows = rows.filter((e) => userIds.includes(e.owner_id));
       rows = rows.filter((e) => canViewEvent(req.db, user, e));
-      rows = rows.filter((e) => !e.source_event_id || e.owner_id === user.id);
 
       const eventIds = rows.map((e) => e.id);
       const exceptionRows: ExceptionRow[] =
