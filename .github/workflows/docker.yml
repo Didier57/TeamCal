@@ -18,6 +18,19 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        run: |
+          exact=$(git tag --points-at HEAD --match 'v*' | head -n1)
+          latest=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)
+          if [ -n "$exact" ]; then
+            echo "value=${exact#v}" >> $GITHUB_OUTPUT
+          elif [ -n "$latest" ]; then
+            echo "value=${latest#v}+$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          else
+            echo "value=0.0.0+$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          fi
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -42,6 +55,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            APP_VERSION=${{ github.sha }}
+            APP_VERSION=${{ steps.version.outputs.value }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
