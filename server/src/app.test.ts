@@ -275,6 +275,15 @@ describe('TeamCal API', () => {
       });
     expect(created.status).toBe(201);
 
+    const bob = request.agent(app);
+    await bob.post('/api/auth/login').send({ username: 'bob', password: 'Password123!' });
+    const bobCalendarId = (await bob.get('/api/calendars')).body[0].id as string;
+    const bobRange = 'start=2026-03-01T00:00:00.000Z&end=2026-03-08T00:00:00.000Z';
+    const bobEventsBefore = await bob.get(
+      `/api/events?${bobRange}&calendarIds=${bobCalendarId}`
+    );
+    expect(bobEventsBefore.body.map((event: any) => event.title)).toContain('Atelier');
+
     db.prepare('DELETE FROM email_log').run();
     const updated = await admin
       .patch(`/api/events/${created.body.eventId}`)
@@ -290,6 +299,11 @@ describe('TeamCal API', () => {
     expect(removedMails).toHaveLength(1);
     expect(removedMails[0].status).toBe('skipped');
     expect(mails.some((mail) => mail.recipient === 'carol@example.com')).toBe(true);
+
+    const bobEventsAfter = await bob.get(
+      `/api/events?${bobRange}&calendarIds=${bobCalendarId}`
+    );
+    expect(bobEventsAfter.body.map((event: any) => event.title)).not.toContain('Atelier');
   });
 
   it('validates event dates and expands recurrences', async () => {

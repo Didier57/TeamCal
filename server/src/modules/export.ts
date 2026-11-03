@@ -53,6 +53,7 @@ export function exportRoutes(): Router {
            LEFT JOIN categories c ON c.id = e.category_id
            WHERE e.status <> 'cancelled'
              AND e.owner_id = ?
+            AND e.source_event_id IS NULL
            ORDER BY e.start_at`
         )
         .all(user.id) as ExportEventRow[];

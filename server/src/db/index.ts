@@ -271,6 +271,13 @@ WHERE v.is_default_personal = 1
     sql: `
 ALTER TABLE users ADD COLUMN last_seen_at TEXT;
 `
+  },
+  {
+    id: 15,
+    sql: `
+ALTER TABLE events ADD COLUMN source_event_id TEXT REFERENCES events(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_events_source ON events(source_event_id);
+`
   }
 ];
 

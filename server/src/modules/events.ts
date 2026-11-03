@@ -125,6 +125,124 @@ function replaceParticipants(db: any, eventId: string, participantIds: string[])
   }
 }
 
+function syncParticipantMirrors(db: any, eventId: string) {
+  const source = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId) as EventRow | undefined;
+  if (!source || source.source_event_id) return;
+  const participantIds = (
+    db.prepare('SELECT user_id FROM event_participants WHERE event_id = ?').all(eventId) as {
+      user_id: string;
+    }[]
+  ).map((row) => row.user_id);
+  const wanted = new Set(participantIds.filter((userId) => userId !== source.owner_id));
+  const mirrors = db
+    .prepare('SELECT * FROM events WHERE source_event_id = ?')
+    .all(eventId) as EventRow[];
+  const deleteEvent = db.prepare('DELETE FROM events WHERE id = ?');
+  for (const mirror of mirrors) {
+    if (!wanted.has(mirror.owner_id)) deleteEvent.run(mirror.id);
+  }
+  const exceptions = db
+    .prepare('SELECT * FROM event_exceptions WHERE event_id = ? ORDER BY occurrence_start')
+    .all(eventId) as ExceptionRow[];
+  const insertException = db.prepare(
+    `INSERT INTO event_exceptions (id, event_id, occurrence_start, action, override_json, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const insertParticipant = db.prepare(
+    'INSERT OR IGNORE INTO event_participants (event_id, user_id) VALUES (?, ?)'
+  );
+  for (const userId of wanted) {
+    const calendar = db.prepare('SELECT id FROM calendars WHERE owner_id = ?').get(userId) as
+      | { id: string }
+      | undefined;
+    if (!calendar) continue;
+    const now = nowIso();
+    const existing = mirrors.find((mirror) => mirror.owner_id === userId);
+    let mirrorId: string;
+    if (existing) {
+      mirrorId = existing.id;
+      db.prepare(
+        `UPDATE events SET calendar_id = ?, created_by = ?, title = ?, description = ?, start_at = ?,
+           end_at = ?, all_day = ?, timezone = ?, location = ?, url = ?, priority = ?, visibility = ?,
+           category_id = ?, rrule = ?, recurrence_until = ?, rdates = ?, sequence = sequence + 1,
+           status = ?, deleted_at = ?, deleted_by = ?, updated_at = ?
+         WHERE id = ?`
+      ).run(
+        calendar.id,
+        source.created_by,
+        source.title,
+        source.description,
+        source.start_at,
+        source.end_at,
+        source.all_day,
+        source.timezone,
+        source.location,
+        source.url,
+        source.priority,
+        source.visibility,
+        source.category_id,
+        source.rrule,
+        source.recurrence_until,
+        source.rdates ?? null,
+        source.status,
+        source.deleted_at ?? null,
+        source.deleted_by ?? null,
+        now,
+        mirrorId
+      );
+    } else {
+      mirrorId = newId();
+      db.prepare(
+        `INSERT INTO events (id, uid, calendar_id, owner_id, created_by, title, description, start_at,
+           end_at, all_day, timezone, location, url, priority, visibility, category_id, rrule,
+           recurrence_until, rdates, sequence, status, deleted_at, deleted_by, source_event_id,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        mirrorId,
+        `${mirrorId}@teamcal`,
+        calendar.id,
+        userId,
+        source.created_by,
+        source.title,
+        source.description,
+        source.start_at,
+        source.end_at,
+        source.all_day,
+        source.timezone,
+        source.location,
+        source.url,
+        source.priority,
+        source.visibility,
+        source.category_id,
+        source.rrule,
+        source.recurrence_until,
+        source.rdates ?? null,
+        source.status,
+        source.deleted_at ?? null,
+        source.deleted_by ?? null,
+        eventId,
+        now,
+        now
+      );
+    }
+    db.prepare('DELETE FROM event_exceptions WHERE event_id = ?').run(mirrorId);
+    for (const exception of exceptions) {
+      insertException.run(
+        newId(),
+        mirrorId,
+        exception.occurrence_start,
+        exception.action,
+        exception.override_json,
+        now,
+        now
+      );
+    }
+    db.prepare('DELETE FROM event_participants WHERE event_id = ?').run(mirrorId);
+    for (const participantId of participantIds) insertParticipant.run(mirrorId, participantId);
+  }
+}
+
 function eventToApi(
   db: any,
   event: EventRow,
@@ -343,6 +461,7 @@ export function eventRoutes(): Router {
       if (calendarIds) rows = rows.filter((e) => calendarIds.includes(e.calendar_id));
       if (userIds) rows = rows.filter((e) => userIds.includes(e.owner_id));
       rows = rows.filter((e) => canViewEvent(req.db, user, e));
+      rows = rows.filter((e) => !e.source_event_id || e.owner_id === user.id);
 
       const eventIds = rows.map((e) => e.id);
       const exceptionRows: ExceptionRow[] =
@@ -435,13 +554,17 @@ export function eventRoutes(): Router {
       }
       const needle = query.toLocaleLowerCase();
       const rows = req.db.prepare('SELECT * FROM events WHERE status <> ?').all('cancelled') as EventRow[];
-      const matches = rows.filter((event) => {
+      const matched = rows.filter((event) => {
         const description = plainDescription(event.description);
         const matchesQuery =
           event.title.toLocaleLowerCase().includes(needle) ||
           description.toLocaleLowerCase().includes(needle);
         return matchesQuery && canViewEvent(req.db, req.user!, event);
       });
+      const visibleIds = new Set(matched.map((event) => event.id));
+      const matches = matched.filter(
+        (event) => !event.source_event_id || !visibleIds.has(event.source_event_id)
+      );
       matches.sort(
         (a, b) =>
           b.start_at.localeCompare(a.start_at) || b.updated_at.localeCompare(a.updated_at)
@@ -608,6 +731,7 @@ export function eventRoutes(): Router {
             now
           );
         replaceParticipants(req.db, id, body.participantIds);
+        syncParticipantMirrors(req.db, id);
       })();
       const event = req.db.prepare('SELECT * FROM events WHERE id = ?').get(id) as EventRow;
       audit(req.db, {
@@ -741,6 +865,7 @@ export function eventRoutes(): Router {
             .prepare('UPDATE events SET sequence = sequence + 1, updated_at = ? WHERE id = ?')
             .run(nowIso(), event.id);
         })();
+        syncParticipantMirrors(req.db, event.id);
         const updated = req.db.prepare('SELECT * FROM events WHERE id = ?').get(event.id) as EventRow;
         audit(req.db, {
           userId: req.user!.id,
@@ -876,6 +1001,7 @@ export function eventRoutes(): Router {
         if (body.participantIds !== undefined) {
           replaceParticipants(req.db, event.id, body.participantIds);
         }
+        syncParticipantMirrors(req.db, event.id);
       })();
       const updated = req.db.prepare('SELECT * FROM events WHERE id = ?').get(event.id) as EventRow;
       const participants = (
@@ -953,6 +1079,7 @@ export function eventRoutes(): Router {
             .prepare('UPDATE events SET sequence = sequence + 1, updated_at = ? WHERE id = ?')
             .run(nowIso(), event.id);
         })();
+        syncParticipantMirrors(req.db, event.id);
         const updated = req.db.prepare('SELECT * FROM events WHERE id = ?').get(event.id) as EventRow;
         audit(req.db, {
           userId: req.user!.id,
@@ -992,6 +1119,7 @@ export function eventRoutes(): Router {
              WHERE id = ?`
           )
           .run(deletedAt, req.user!.id, deletedAt, event.id);
+        syncParticipantMirrors(req.db, event.id);
       })();
       const cancelled = req.db.prepare('SELECT * FROM events WHERE id = ?').get(event.id) as EventRow;
       audit(req.db, {
