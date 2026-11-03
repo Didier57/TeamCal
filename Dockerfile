@@ -10,6 +10,8 @@ COPY patches ./patches
 RUN npm ci --no-audit --no-fund
 
 FROM base AS build
+ARG APP_VERSION=dev
+ENV APP_VERSION=${APP_VERSION}
 COPY . .
 RUN npm run build
 

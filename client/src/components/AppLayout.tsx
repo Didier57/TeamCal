@@ -13,6 +13,7 @@ export function AppLayout() {
   if (!user || !settings) return null;
 
   const displayName = `${user.firstName} ${user.lastName}`.trim() || user.username;
+  const versionLabel = `v${/^[0-9a-f]{40}$/.test(__APP_VERSION__) ? __APP_VERSION__.slice(0, 7) : __APP_VERSION__}`;
 
   async function changeLanguage(next: Language) {
     const previous = user!.language;
@@ -31,7 +32,7 @@ export function AppLayout() {
         <div className="brand">
           <div>
             <strong>{settings.appName}</strong>
-            <small>{t('app.tagline')}</small>
+            <small>{versionLabel}</small>
           </div>
         </div>
         <nav className="main-nav">
